@@ -4,13 +4,13 @@ Simple, not slow CSV parsing library for C
 ## Usage
 ### Create a reader object
 
-```
+```c
 ccsv_reader *reader = ccsv_init_reader(NULL); // NULL for default options
 ```
 
 ### Create a reader object with custom options
 
-```
+```c
 ccsv_options *options = malloc(sizeof(ccsv_options));
 
 options->delim = ','; // Specify the delimiter
@@ -32,7 +32,7 @@ free(options); // Free the memory allocated to the options
 
 ### Read a row with
 
-```
+```c
 CSVRow *row = read_row(fp, reader); // Will return NULL if all rows are read 
 ```
 
@@ -42,25 +42,25 @@ CSVRow *row = read_row(fp, reader); // Will return NULL if all rows are read
 
 ### Get the number of fields in a row with
 
-```
+```c
 int row_len = row->fields_count;
 ```
 
 ### Get a field from a row with
 
-```
+```c
 char *field = row->fields[0]; // 0 for the first field
 ```
 
 ### Free the memory allocated to a row with
 
-```
+```c
 free_row(row);
 ```
 
 ### Free the memory allocated to the reader with
 
-```
+```c
 free(reader);
 ```
 
@@ -68,7 +68,7 @@ free(reader);
 
 ## Example
 
-```
+```c
 #include <stdio.h>
 #include <stdlib.h>
 
