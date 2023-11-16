@@ -78,7 +78,7 @@ extern "C"
         char __comment_char;
         char __ignore_empty_line; // Currently not working properly
         char __ignore_comment;
-        char __ignore_escape_sequence; // Currently not working (escape sequence is always ignored)
+        char __ignore_escape_sequence;
         int rows_read;
         int __inside_quotes;
         int __inside_comment;
@@ -152,7 +152,7 @@ extern "C"
             str: pointer to the string
             escape_char: pointer to the escape sequence
     */
-    int _is_escaped(char *str, const char *escape_seq);
+    int _is_escaped(const char *str, const char *escape_seq);
 
 #ifdef __cplusplus
 }

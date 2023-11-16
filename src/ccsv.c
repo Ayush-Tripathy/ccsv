@@ -80,7 +80,7 @@ ccsv_reader *ccsv_init_reader(ccsv_reader_options *options)
             ignore_comment = options->ignore_comment;
 
         if (options->ignore_escape_sequence == '\0')
-            ignore_escape_sequence = 1;
+            ignore_escape_sequence = 0;
 
         else
             ignore_escape_sequence = options->ignore_escape_sequence;
@@ -261,13 +261,11 @@ char *_get_row_string(FILE *fp, ccsv_reader *parser)
 char *_get_field(char **row_string, ccsv_reader *parser)
 {
     size_t len = strlen((*row_string));
-
-    if (!len)
+    if (len == 0)
         return NULL;
 
-    char *field = (char *)malloc(MAX_FIELD_SIZE);
     size_t current_pos = 0;
-    int field_pos = 0;
+    size_t field_pos = 0;
     size_t size = MAX_FIELD_SIZE;
 
     const char QUOTE_CHAR = parser->__quote_char;
@@ -277,85 +275,69 @@ char *_get_field(char **row_string, ccsv_reader *parser)
 
     int inside_quotes = parser->__inside_quotes;
 
-    while (1)
-    {
-        if ((*row_string)[current_pos] == '\0')
-        {
-            goto update_row_string;
-        }
+    char *field = (char *)malloc(size);
+    if (field == NULL)
+        return NULL;
 
-        if ((*row_string)[current_pos] == QUOTE_CHAR)
+    while ((*row_string)[current_pos] != '\0')
+    {
+        char current_char = (*row_string)[current_pos];
+
+        if (current_char == QUOTE_CHAR)
         {
-            if (IGNORE_ESCAPE_SEQUENCE &&
+            if (!IGNORE_ESCAPE_SEQUENCE &&
                 _is_escaped((*row_string) + current_pos, ESCAPE_CHAR))
             {
-                field[field_pos] = (*row_string)[current_pos];
+                field[field_pos++] = current_char;
                 current_pos++;
             }
             else
             {
-                inside_quotes = !inside_quotes ? 1 : 0;
+                inside_quotes = inside_quotes ? 0 : 1;
             }
         }
-        else if ((*row_string)[current_pos] == DELIM &&
-                 !inside_quotes)
+        else if (current_char == DELIM && !inside_quotes)
         {
             break;
         }
-        else
+        else if (current_char != '\r')
         {
-            if ((*row_string)[current_pos] != '\r')
-            {
-                field[field_pos] = (*row_string)[current_pos];
-                field_pos++;
-            }
+            field[field_pos++] = current_char;
         }
+
         current_pos++;
 
-        if (current_pos >= size)
+        if (field_pos >= size - 1)
         {
             size += MAX_FIELD_SIZE;
-            field = (char *)realloc(field, size);
+            char *temp = (char *)realloc(field, size);
+            if (temp == NULL)
+            {
+                free(field);
+                return NULL;
+            }
+            field = temp;
         }
     }
 
-    field[current_pos] = '\0';
-
-update_row_string:
-    if ((*row_string)[current_pos] == DELIM)
-    {
-        *row_string = (*row_string) + current_pos + 1;
-    }
-    else
-    {
-        *row_string = (*row_string) + current_pos;
-    }
+    field[field_pos] = '\0';
+    *row_string = (*row_string) + current_pos + (DELIM == (*row_string)[current_pos]);
 
     parser->__inside_quotes = inside_quotes;
 
     return field;
 }
 
-int _is_escaped(char *str, const char *escape_seq)
+inline int _is_escaped(const char *str, const char *escape_seq)
 {
     int pos = 0;
-    int is_escaped = 0;
-
     while (escape_seq[pos] != '\0')
     {
         if (str[pos] != escape_seq[pos])
-        {
-            is_escaped = 0;
-            return is_escaped;
-        }
-        else
-        {
-            is_escaped = 1;
-        }
+            return 0;
         pos++;
     }
-
-    return is_escaped;
+    return 1;
 }
 
 /* Writer */

@@ -17,11 +17,12 @@ options->delim = ','; // Specify the delimiter
 options->quote_char = '"'; // Specify the quote character
 options->escape_seq = "\"\""; // Specify the escape character
 options->ignore_comment = 1; // Specify whether to skip comment lines or not
+options->ignore_escape_sequence = 1; // Specify whether to ignore escape sequences or not
 
 // Below options are not working properly yet
 options->ignore_empty_lines = 1; // Specify whether to skip empty rows or not
-options->ignore_escape_sequence = 1; // Specify whether to ignore escape sequences or not
 
+// Initialize the reader with the options
 ccsv_reader *reader = ccsv_init_reader(options);
 // After initializing the reader, you can
 free(options); // Free the memory allocated to the options
