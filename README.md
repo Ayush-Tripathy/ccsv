@@ -15,12 +15,7 @@ ccsv_options *options = malloc(sizeof(ccsv_options));
 
 options->delim = ','; // Specify the delimiter
 options->quote_char = '"'; // Specify the quote character
-options->escape_seq = "\"\""; // Specify the escape character
-options->ignore_comment = 1; // Specify whether to skip comment lines or not
-options->ignore_escape_sequence = 1; // Specify whether to ignore escape sequences or not
-
-// Below options are not working properly yet
-options->ignore_empty_lines = 1; // Specify whether to skip empty rows or not
+options->skip_initial_space = 1; // Specify if you want to skip the initial space after the delimiter
 
 // Initialize the reader with the options
 ccsv_reader *reader = ccsv_init_reader(options);
@@ -113,3 +108,6 @@ int main(void)
 #### You can find more examples in the `examples` folder
 
 Compile with `make ./example_file_name`
+
+
+## Feel free to contribute!

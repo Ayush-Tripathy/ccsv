@@ -17,22 +17,13 @@
 
 ccsv_reader *ccsv_init_reader(ccsv_reader_options *options)
 {
-    char delim, quote_char, *escape_char, comment_char;
-    int ignore_empty_line, ignore_comment, ignore_escape_sequence;
+    char delim, quote_char;
+    int skip_initial_space;
     if (options == NULL)
     {
         delim = DEFAULT_DELIMITER;
         quote_char = DEFAULT_QUOTE_CHAR;
-#ifdef __cplusplus
-        escape_char = (char *)DEFAULT_ESCAPE_SEQUENCE;
-#else
-        escape_char = DEFAULT_ESCAPE_SEQUENCE;
-#endif
-        comment_char = DEFAULT_COMMENT_CHAR;
-
-        ignore_empty_line = 1;
-        ignore_comment = 1;
-        ignore_escape_sequence = 1;
+        skip_initial_space = 0;
     }
     else
     {
@@ -50,102 +41,29 @@ ccsv_reader *ccsv_init_reader(ccsv_reader_options *options)
         else
             quote_char = options->quote_char;
 
-        if (options->escape_char == NULL)
+        if (options->skip_intial_space == '\0')
         {
-#ifdef __cplusplus
-            escape_char = (char *)DEFAULT_ESCAPE_SEQUENCE;
-#else
-            escape_char = DEFAULT_ESCAPE_SEQUENCE;
-#endif
+            skip_initial_space = 0;
         }
         else
-            escape_char = options->escape_char;
-
-        if (options->comment_char == '\0')
-            comment_char = DEFAULT_COMMENT_CHAR;
-
-        else
-            comment_char = options->comment_char;
-
-        if (options->ignore_empty_line == '\0')
-            ignore_empty_line = 1;
-
-        else
-            ignore_empty_line = options->ignore_empty_line;
-
-        if (options->ignore_comment == '\0')
-            ignore_comment = 1;
-
-        else
-            ignore_comment = options->ignore_comment;
-
-        if (options->ignore_escape_sequence == '\0')
-            ignore_escape_sequence = 0;
-
-        else
-            ignore_escape_sequence = options->ignore_escape_sequence;
+        {
+            skip_initial_space = options->skip_intial_space;
+        }
     }
 
     // Parser
     ccsv_reader *parser = (ccsv_reader *)malloc(sizeof(ccsv_reader));
     parser->__delim = delim;
     parser->__quote_char = quote_char;
-    parser->__escape_char = escape_char;
-    parser->__comment_char = comment_char;
-
-    parser->__ignore_empty_line = ignore_empty_line;
-    parser->__ignore_comment = ignore_comment;
-    parser->__ignore_escape_sequence = ignore_escape_sequence;
-
-    parser->__inside_quotes = 0;
+    parser->__skip_intial_space = skip_initial_space;
 
     parser->rows_read = 0;
 
     return parser;
 }
 
-CSVRow *read_row(FILE *fp, ccsv_reader *parser)
-{
-    CSVRow *row = (CSVRow *)malloc(sizeof(CSVRow));
-    row->__row_string = _get_row_string(fp, parser);
-    if (row->__row_string == NULL)
-    {
-        free(row);
-        return NULL;
-    }
-
-    char *row_string = row->__row_string;
-    size_t row_len = strlen(row_string);
-
-    row->__row_string_start = row_string;
-    row->original_row_string = (char *)malloc(row_len + 1);
-    memcpy(row->original_row_string, row->__row_string, row_len + 1);
-    row->fields_count = 0;
-    row->fields = (char **)malloc(sizeof(char *));
-
-    char *field;
-    int *fields_count = &(row->fields_count);
-
-    while ((field = _get_field(&(row_string), parser)) != NULL)
-    {
-        size_t field_len = strlen(field);
-        (*fields_count)++;
-        row->fields = (char **)realloc(row->fields, sizeof(char *) * (*fields_count));
-        row->fields[*fields_count - 1] = (char *)malloc(field_len + 1);
-        // strcpy(row->fields[*fields_count - 1], field);
-        memcpy(row->fields[*fields_count - 1], field, field_len + 1);
-        free(field);
-    }
-
-    parser->rows_read++;
-    return row;
-}
-
 void free_row(CSVRow *row)
 {
-    free(row->__row_string_start);
-    free(row->original_row_string);
-
     const int fields_count = row->fields_count;
     for (int i = 0; i < fields_count; i++)
     {
@@ -155,189 +73,245 @@ void free_row(CSVRow *row)
     free(row);
 }
 
-char *_get_row_string(FILE *fp, ccsv_reader *parser)
+CSVRow *read_row(FILE *fp, ccsv_reader *reader)
 {
-    char *buffer = (char *)malloc(MAX_BUFFER_SIZE);
-    size_t size = MAX_BUFFER_SIZE;
-    size_t current_pos = 0;
-    size_t last_pos = 0;
-    int inside_empty_line = 0;
-
-    const char QUOTE_CHAR = parser->__quote_char;
-    const char COMMENT_CHAR = parser->__comment_char;
-    const int IGNORE_COMMENT = parser->__ignore_comment;
-    const int IGNORE_EMPTY_LINE = parser->__ignore_empty_line;
-
-    int inside_quotes = parser->__inside_quotes;
-
-    while (1)
+    CSVRow *row = (CSVRow *)malloc(sizeof(CSVRow));
+    if (row == NULL)
     {
-        char temp[MAX_BUFFER_SIZE] = "";
-
-        // Get some part of line from file
-        if (fgets(temp, MAX_BUFFER_SIZE, fp) == NULL)
-        {
-            break; // Break if the end of the file is reached
-        }
-
-        size_t len = strlen(temp);
-
-        // Ignore line if it is a comment
-        if (IGNORE_COMMENT &&
-            temp[0] == COMMENT_CHAR &&
-            !inside_quotes)
-        {
-            continue;
-        }
-
-        // Ignore line if it is empty
-        // Need to fix this, some cases are not handled
-        if (IGNORE_EMPTY_LINE &&
-            (temp[0] == '\r' && temp[1] == '\n') &&
-            !inside_quotes)
-        {
-            // To handle the case where the fgets function reads the ending of the previous line
-            temp[0] = '\0';
-            inside_empty_line = 1;
-            // continue;
-        }
-        else
-        {
-            inside_empty_line = 0;
-        }
-
-        // Check if the line ended in that part
-        // Check if inside quote char
-        while (1)
-        {
-            if (temp[current_pos] == QUOTE_CHAR)
-            {
-                inside_quotes = !inside_quotes ? 1 : 0;
-            }
-            current_pos++;
-            if (current_pos == len)
-                break;
-        }
-
-        // Store it in buffer
-        memcpy(buffer + last_pos, temp, len + 1);
-
-        if ((temp[len - 1] == '\n' || (temp[len - 2] == '\r' && temp[len - 1] == '\n')) &&
-            !inside_quotes)
-        {
-            last_pos += current_pos - 1;
-            current_pos = 0;
-            break;
-        }
-        else
-        {
-            size += MAX_BUFFER_SIZE;
-            buffer = (char *)realloc(buffer, size);
-        }
-        last_pos += current_pos;
-        current_pos = 0;
-    }
-
-    parser->__inside_quotes = inside_quotes;
-
-    // Null terminate the string
-    buffer[last_pos + current_pos] = '\0';
-
-    if (strlen(buffer) == 0 && !inside_empty_line)
-    {
-        free(buffer);
-        return NULL;
-    }
-    // Check if all quotes are closed or not, if not raise error
-    if (inside_quotes)
-    {
-        printf("CSVError: Quotes not closed\n");
+        printf("Row is null\n");
         exit(1);
     }
 
-    return buffer;
-}
+    const char DELIM = reader->__delim;
+    const char QUOTE_CHAR = reader->__quote_char;
+    const int SKIP_INITIAL_SPACE = reader->__skip_intial_space;
 
-char *_get_field(char **row_string, ccsv_reader *parser)
-{
-    size_t len = strlen((*row_string));
-    if (len == 0)
-        return NULL;
+    State state = FIELD_START;
 
-    size_t current_pos = 0;
-    size_t field_pos = 0;
-    size_t size = MAX_FIELD_SIZE;
-
-    const char QUOTE_CHAR = parser->__quote_char;
-    const char DELIM = parser->__delim;
-    const char *ESCAPE_CHAR = parser->__escape_char;
-    const int IGNORE_ESCAPE_SEQUENCE = parser->__ignore_escape_sequence;
-
-    int inside_quotes = parser->__inside_quotes;
-
-    char *field = (char *)malloc(size);
-    if (field == NULL)
-        return NULL;
-
-    while ((*row_string)[current_pos] != '\0')
+    char *row_string = (char *)malloc(MAX_BUFFER_SIZE + 1);
+    if (row_string == NULL)
     {
-        char current_char = (*row_string)[current_pos];
+        printf("Row string is null\n");
+        exit(1);
+    }
+    size_t row_string_size = MAX_BUFFER_SIZE;
+    size_t row_pos = 0;
 
-        if (current_char == QUOTE_CHAR)
+    char **fields = (char **)malloc(sizeof(char *));
+    size_t fields_count = 0;
+
+    char *field = (char *)malloc(MAX_FIELD_SIZE + 1);
+    if (field == NULL)
+    {
+        printf("2.Field is null\n");
+        exit(1);
+    }
+    size_t field_size = MAX_FIELD_SIZE;
+    size_t field_pos = 0;
+
+    int inside_quotes = 0;
+
+readfile:
+    if (fgets(row_string, MAX_BUFFER_SIZE, fp) == NULL)
+    {
+        free(row_string);
+        free(field);
+        free(fields);
+        free(row);
+        return NULL;
+    }
+
+    size_t row_len = strlen(row_string);
+    row_pos = 0;
+
+    while (1)
+    {
+        char c = row_string[row_pos];
+        switch (state)
         {
-            if (!IGNORE_ESCAPE_SEQUENCE &&
-                _is_escaped((*row_string) + current_pos, ESCAPE_CHAR))
+        case FIELD_START:
+            if (c == QUOTE_CHAR)
             {
-                field[field_pos++] = current_char;
-                current_pos++;
+                state = INSIDE_QUOTED_FIELD;
+            }
+            else if (SKIP_INITIAL_SPACE && c == ' ')
+            {
+                state = FIELD_NOT_STARTED;
+            }
+            else if (c == DELIM)
+            {
+                row_pos--;
+                state = FIELD_END;
+            }
+            else if (c == '\r' || c == '\n')
+            {
+                state = FIELD_END;
+                row_pos--;
             }
             else
             {
-                inside_quotes = inside_quotes ? 0 : 1;
+                state = FIELD_STARTED;
+                field[field_pos++] = c;
             }
-        }
-        else if (current_char == DELIM && !inside_quotes)
-        {
+            row_pos++;
             break;
-        }
-        else if (current_char != '\r')
-        {
-            field[field_pos++] = current_char;
-        }
 
-        current_pos++;
+        case INSIDE_QUOTED_FIELD:
+            inside_quotes = 1;
+            if (c == QUOTE_CHAR)
+            {
+                state = MAY_BE_ESCAPED;
+            }
+            else
+            {
+                state = FIELD_STARTED;
+                field[field_pos++] = c;
+            }
+            row_pos++;
+            break;
 
-        if (field_pos >= size - 1)
-        {
-            size += MAX_FIELD_SIZE;
-            char *temp = (char *)realloc(field, size);
-            if (temp == NULL)
+        case FIELD_NOT_STARTED:
+            if (c == QUOTE_CHAR)
+            {
+                state = INSIDE_QUOTED_FIELD;
+            }
+            else if (c == DELIM)
+            {
+                row_pos--;
+                state = FIELD_END;
+            }
+            else if (c == ' ')
+            {
+                state = FIELD_NOT_STARTED;
+            }
+            else
+            {
+                state = FIELD_STARTED;
+                field[field_pos++] = c;
+            }
+            row_pos++;
+            break;
+
+        case FIELD_STARTED:
+            if (field_pos > field_size - 1)
+            {
+                field_size += MAX_FIELD_SIZE;
+                field = (char *)realloc(field, field_size + 1);
+                if (field == NULL)
+                {
+                    printf("1.Field is null\n");
+                    exit(1);
+                }
+            }
+
+            if (row_pos > row_len - 1)
+            {
+                row_string_size += MAX_BUFFER_SIZE;
+                row_string = (char *)realloc(row_string, row_string_size + 1);
+                if (row_string == NULL)
+                {
+                    printf("Row string is null\n");
+                    exit(1);
+                }
+            }
+            if (c == QUOTE_CHAR && inside_quotes)
+            {
+                state = MAY_BE_ESCAPED;
+            }
+            else if (c == QUOTE_CHAR && !inside_quotes)
+            {
+                state = FIELD_STARTED;
+                field[field_pos++] = c;
+            }
+            else if (c == DELIM && !inside_quotes)
+            {
+                row_pos--;
+                state = FIELD_END;
+            }
+            else if ((c == '\n' || c == '\r') && !inside_quotes)
+            {
+                row_pos--;
+                state = FIELD_END;
+            }
+            else if (c == '\0')
+            {
+                row_pos--;
+                state = FIELD_END;
+            }
+            else
+            {
+                state = FIELD_STARTED;
+                field[field_pos++] = c;
+            }
+            row_pos++;
+            break;
+
+        case MAY_BE_ESCAPED:
+            if (c == QUOTE_CHAR)
+            {
+                state = FIELD_STARTED;
+                field[field_pos++] = c;
+            }
+            else
+            {
+                inside_quotes = 0;
+                state = FIELD_STARTED;
+                row_pos--;
+            }
+
+            row_pos++;
+            break;
+
+        case FIELD_END:
+            state = FIELD_START;
+            field[field_pos++] = '\0';
+            fields_count++;
+            fields = (char **)realloc(fields, sizeof(char *) * fields_count);
+            fields[fields_count - 1] = field;
+            row_pos++;
+            field = (char *)malloc(MAX_FIELD_SIZE + 1);
+            field_size = MAX_FIELD_SIZE;
+            if (field == NULL)
+            {
+                printf("Field is null\n");
+                exit(1);
+            }
+            field_pos = 0;
+
+            if (c == '\r' || c == '\n' || c == '\0')
             {
                 free(field);
-                return NULL;
+                goto end;
             }
-            field = temp;
+
+            break;
+
+        default:
+            printf("Default\n");
+            break;
+        }
+
+        if (row_string[row_pos] == '\0' && !inside_quotes)
+        {
+            // Add the last field
+            fields_count++;
+            fields = (char **)realloc(fields, sizeof(char *) * fields_count);
+            fields[fields_count - 1] = field;
+            goto end;
+        }
+        else if (row_pos > row_len - 1)
+        {
+            goto readfile;
         }
     }
 
-    field[field_pos] = '\0';
-    *row_string = (*row_string) + current_pos + (DELIM == (*row_string)[current_pos]);
+end:
+    row->fields = fields;
+    row->fields_count = fields_count;
+    free(row_string);
 
-    parser->__inside_quotes = inside_quotes;
-
-    return field;
-}
-
-inline int _is_escaped(const char *str, const char *escape_seq)
-{
-    int pos = 0;
-    while (escape_seq[pos] != '\0')
-    {
-        if (str[pos] != escape_seq[pos])
-            return 0;
-        pos++;
-    }
-    return 1;
+    reader->rows_read++;
+    return row;
 }
 
 /* Writer */

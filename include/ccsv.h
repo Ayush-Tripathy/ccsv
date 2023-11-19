@@ -9,11 +9,7 @@
     The parser can be configured with the following parameters:
         - delimiter character
         - quote character
-        - escape character
-        - comment character
-        - ignore empty lines
-        - ignore comments
-        - ignore escape sequences
+        - skip initial space
     The parser can be configured to ignore empty lines, comments, and escape sequences.
 
     For more information on how to use the parser, see the README.md file.
@@ -22,9 +18,6 @@
         - ccsv_init_reader
         - read_row
         - free_row
-        - get_row_string (internal use)
-        - get_field (internal use)
-        - is_escaped (internal use)
 
     Structs available:
         - ccsv_reader_options
@@ -45,6 +38,7 @@
 #pragma once
 
 #include <stdio.h>
+#include <ctype.h>
 
 #ifdef __cplusplus
 extern "C"
@@ -59,37 +53,33 @@ extern "C"
 #define DEFAULT_ESCAPE_SEQUENCE "\"\""
 #define DEFAULT_COMMENT_CHAR '#'
 
+    typedef enum State
+    {
+        FIELD_START,
+        FIELD_NOT_STARTED,
+        FIELD_END,
+        FIELD_STARTED,
+        INSIDE_QUOTED_FIELD,
+        MAY_BE_ESCAPED
+    } State;
+
     typedef struct ccsv_reader_options
     {
         char delim;
         char quote_char;
-        char *escape_char;
-        char comment_char;
-        char ignore_empty_line;
-        char ignore_comment;
-        char ignore_escape_sequence;
+        int skip_intial_space;
     } ccsv_reader_options;
 
     typedef struct ccsv_reader
     {
+        int rows_read;
         char __delim;
         char __quote_char;
-        char *__escape_char;
-        char __comment_char;
-        char __ignore_empty_line; // Currently not working properly
-        char __ignore_comment;
-        char __ignore_escape_sequence;
-        int rows_read;
-        int __inside_quotes;
-        int __inside_comment;
-
+        int __skip_intial_space;
     } ccsv_reader;
 
     typedef struct CSVRow
     {
-        char *__row_string;
-        char *__row_string_start;
-        char *original_row_string;
         char **fields;
         int fields_count;
     } CSVRow;
@@ -122,37 +112,6 @@ extern "C"
             row: pointer to the CSVRow struct
     */
     void free_row(CSVRow *row);
-
-    // Private functions -----------------------------------------------------------------------
-
-    /*
-        This function reads a row in form of string from the file pointer, and returns a pointer
-        to that row string.
-
-        params:
-            fp: file pointer
-            parser: pointer to the parser
-    */
-    char *_get_row_string(FILE *fp, ccsv_reader *parser);
-
-    /*
-        This function reads a field in form of string from the row string, and returns a pointer
-        to that field string.
-
-        params:
-            row_string: pointer to the row string
-            parser: pointer to the parser
-    */
-    char *_get_field(char **row_string, ccsv_reader *parser);
-
-    /*
-        This function checks if the given string is escaped or not.
-
-        params:
-            str: pointer to the string
-            escape_char: pointer to the escape sequence
-    */
-    int _is_escaped(const char *str, const char *escape_seq);
 
 #ifdef __cplusplus
 }

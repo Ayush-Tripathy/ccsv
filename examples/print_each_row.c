@@ -19,12 +19,7 @@ int main(void)
         Default options:
         delim = ','
         quote_char = '"'
-        escape_char = "\"\""
-        comment_char = '#'
-
-        ignore_empty_line = 1
-        ignore_comment = 1
-        ignore_escape_sequence = 1
+        skip_initial_space = 0
     */
 
     CSVRow *row;

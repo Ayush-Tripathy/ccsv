@@ -16,12 +16,7 @@ int main(void)
     ccsv_reader_options *options = (ccsv_reader_options *)malloc(sizeof(ccsv_reader_options));
     options->delim = ',';
     options->quote_char = '"';
-    options->escape_char = "\"\"";
-    options->comment_char = '#';
-
-    options->ignore_empty_line = 1;
-    options->ignore_comment = 1;
-    options->ignore_escape_sequence = 1;
+    options->skip_intial_space = 0;
 
     // Reader object
     ccsv_reader *reader = ccsv_init_reader(options); // NULL for default options
