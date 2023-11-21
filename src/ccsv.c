@@ -315,3 +315,87 @@ end:
 }
 
 /* Writer */
+
+ccsv_writer *ccsv_init_writer(ccsv_writer_options *options)
+{
+    char delim, quote_char;
+    if (options == NULL)
+    {
+        delim = DEFAULT_DELIMITER;
+        quote_char = DEFAULT_QUOTE_CHAR;
+    }
+    else
+    {
+        // It is not mandatory to pass all options to options struct
+        // So check if the option is passed or not, if not then use the default value
+        if (options->delim == '\0')
+            delim = DEFAULT_DELIMITER;
+
+        else
+            delim = options->delim;
+
+        if (options->quote_char == '\0')
+            quote_char = DEFAULT_QUOTE_CHAR;
+
+        else
+            quote_char = options->quote_char;
+    }
+
+    // Writer
+    ccsv_writer *writer = (ccsv_writer *)malloc(sizeof(ccsv_writer));
+    writer->__delim = delim;
+    writer->__quote_char = quote_char;
+
+    return writer;
+}
+
+void write_row(FILE *fp, ccsv_writer *writer, CSVRow *row)
+{
+    const char DELIM = writer->__delim;
+    const char QUOTE_CHAR = writer->__quote_char;
+
+    const int fields_count = row->fields_count;
+
+    fputc('\n', fp);
+    for (int i = 0; i < fields_count; i++)
+    {
+        char *field = row->fields[i];
+        int field_len = strlen(field);
+
+        int inside_quotes = 0;
+        for (int j = 0; j < field_len; j++)
+        {
+            char c = field[j];
+            if (c == DELIM || c == QUOTE_CHAR || c == '\n' || c == '\r')
+            {
+                inside_quotes = 1;
+                break;
+            }
+        }
+
+        if (inside_quotes)
+        {
+            fputc(QUOTE_CHAR, fp);
+            for (int j = 0; j < field_len; j++)
+            {
+                char c = field[j];
+                // Escape the quote character
+                if (c == QUOTE_CHAR)
+                {
+                    fputc(QUOTE_CHAR, fp);
+                }
+                fputc(c, fp);
+            }
+            fputc(QUOTE_CHAR, fp);
+        }
+        else
+        {
+            fputs(field, fp);
+        }
+
+        if (i != fields_count - 1)
+        {
+            fputc(DELIM, fp);
+        }
+    }
+}

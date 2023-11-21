@@ -84,7 +84,21 @@ extern "C"
         int fields_count;
     } CSVRow;
 
+    typedef struct ccsv_writer_options
+    {
+        char delim;
+        char quote_char;
+    } ccsv_writer_options;
+
+    typedef struct ccsv_writer
+    {
+        char __delim;
+        char __quote_char;
+    } ccsv_writer;
+
     // Public functions ------------------------------------------------------------------------
+
+    /* -------- Reader -------- */
 
     /*
         This function initializes the parser with the given parameters, and
@@ -112,6 +126,28 @@ extern "C"
             row: pointer to the CSVRow struct
     */
     void free_row(CSVRow *row);
+
+    /* -------- Writer -------- */
+
+    /*
+        This function initializes the writer with the given parameters, and
+        returns a pointer to the writer.
+
+        params:
+            options: pointer to the writer options struct
+
+    */
+    ccsv_writer *ccsv_init_writer(ccsv_writer_options *options);
+
+    /*
+        This function writes a row (from CSVRow struct) to the file pointer.
+
+        params:
+            fp: file pointer
+            writer: pointer to the writer
+            row: pointer to the CSVRow struct
+    */
+    void write_row(FILE *fp, ccsv_writer *writer, CSVRow *row);
 
 #ifdef __cplusplus
 }
