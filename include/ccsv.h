@@ -149,6 +149,35 @@ extern "C"
     */
     void write_row(FILE *fp, ccsv_writer *writer, CSVRow *row);
 
+    /*
+        This function writes a row (from string) to the file pointer.
+
+        params:
+            fp: file pointer
+            writer: pointer to the writer
+            row_string: pointer to the row string
+    */
+    void write_row_from_string(FILE *fp, ccsv_writer *writer, char *row_string);
+
+    // Private functions -----------------------------------------------------------------------
+
+    /* -------- Writer -------- */
+
+    /*
+        This function writes a field to the file pointer.
+
+        params:
+            fp: file pointer
+            writer: pointer to the writer
+            string: pointer to the string
+            string_len: length of the string
+            string_pos: pointer to the position of the string
+
+        returns:
+            size_t: number of characters written
+    */
+    size_t _write_field(FILE *fp, ccsv_writer *writer, char *string, size_t string_len, size_t *string_pos);
+
 #ifdef __cplusplus
 }
 #endif

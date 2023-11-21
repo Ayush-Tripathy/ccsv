@@ -9,6 +9,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 
 // ccsv header file
 #include "ccsv.h"
@@ -78,8 +79,7 @@ CSVRow *read_row(FILE *fp, ccsv_reader *reader)
     CSVRow *row = (CSVRow *)malloc(sizeof(CSVRow));
     if (row == NULL)
     {
-        printf("Row is null\n");
-        exit(1);
+        return ENOMEM;
     }
 
     const char DELIM = reader->__delim;
@@ -91,8 +91,7 @@ CSVRow *read_row(FILE *fp, ccsv_reader *reader)
     char *row_string = (char *)malloc(MAX_BUFFER_SIZE + 1);
     if (row_string == NULL)
     {
-        printf("Row string is null\n");
-        exit(1);
+        return ENOMEM;
     }
     size_t row_string_size = MAX_BUFFER_SIZE;
     size_t row_pos = 0;
@@ -103,8 +102,7 @@ CSVRow *read_row(FILE *fp, ccsv_reader *reader)
     char *field = (char *)malloc(MAX_FIELD_SIZE + 1);
     if (field == NULL)
     {
-        printf("2.Field is null\n");
-        exit(1);
+        return ENOMEM;
     }
     size_t field_size = MAX_FIELD_SIZE;
     size_t field_pos = 0;
@@ -199,8 +197,7 @@ readfile:
                 field = (char *)realloc(field, field_size + 1);
                 if (field == NULL)
                 {
-                    printf("1.Field is null\n");
-                    exit(1);
+                    return ENOMEM;
                 }
             }
 
@@ -210,8 +207,7 @@ readfile:
                 row_string = (char *)realloc(row_string, row_string_size + 1);
                 if (row_string == NULL)
                 {
-                    printf("Row string is null\n");
-                    exit(1);
+                    return ENOMEM;
                 }
             }
             if (c == QUOTE_CHAR && inside_quotes)
@@ -273,8 +269,7 @@ readfile:
             field_size = MAX_FIELD_SIZE;
             if (field == NULL)
             {
-                printf("Field is null\n");
-                exit(1);
+                return ENOMEM;
             }
             field_pos = 0;
 
@@ -287,7 +282,6 @@ readfile:
             break;
 
         default:
-            printf("Default\n");
             break;
         }
 
@@ -398,4 +392,80 @@ void write_row(FILE *fp, ccsv_writer *writer, CSVRow *row)
             fputc(DELIM, fp);
         }
     }
+}
+
+void write_row_from_string(FILE *fp, ccsv_writer *writer, char *row_string)
+{
+    // Example string - "hi,hello,  \"hello, world!\", bye";
+
+    size_t string_len = strlen(row_string);
+    char *string = (char *)malloc(string_len + 1);
+    strcpy(string, row_string);
+
+    size_t string_pos = 0, write_count;
+
+    while ((write_count = _write_field(fp, writer, string, string_len, &string_pos)) > 0)
+    {
+        if (string_len == 0)
+            break;
+    }
+
+    // CRLF - line terminator
+    fputs("\r\n", fp);
+    free(string);
+}
+
+size_t _write_field(FILE *fp, ccsv_writer *writer, char *string, size_t string_len, size_t *string_pos)
+{
+    const char DELIM = writer->__delim;
+    const char QUOTE_CHAR = writer->__quote_char;
+
+    int inside_quotes = 0;
+    size_t write_count = 0;
+
+    char ch;
+    size_t current_pos = *string_pos;
+
+    while (1)
+    {
+        if (current_pos > string_len - 1)
+        {
+            break;
+        }
+
+        ch = string[current_pos++];
+
+        if (ch == '\0')
+        {
+            break;
+        }
+        else if ((ch == '\n' || ch == '\r') && !inside_quotes)
+        {
+            break;
+        }
+        else if (ch == QUOTE_CHAR)
+        {
+            inside_quotes = !inside_quotes;
+        }
+        else if (ch == DELIM && !inside_quotes)
+        {
+            break;
+        }
+    }
+
+    write_count = current_pos - (*string_pos);
+
+    char *string_to_write = (char *)malloc(write_count + 1);
+    if (string_to_write == NULL)
+    {
+        return ENOMEM;
+    }
+    memcpy(string_to_write, string + (*string_pos), write_count);
+    string_to_write[write_count] = '\0';
+
+    *string_pos = current_pos;
+
+    fputs(string_to_write, fp);
+    free(string_to_write);
+    return write_count;
 }
