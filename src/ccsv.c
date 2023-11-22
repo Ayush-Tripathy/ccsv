@@ -9,12 +9,51 @@
 
 #include <stdlib.h>
 #include <string.h>
-#include <errno.h>
 
 // ccsv header file
 #include "ccsv.h"
 
 /* Reader */
+
+#define ADD_FIELD(field)                                              \
+    field[field_pos++] = CSV_NULL_CHAR;                               \
+    fields_count++;                                                   \
+    fields = (char **)realloc(fields, sizeof(char *) * fields_count); \
+    if (fields == NULL)                                               \
+    {                                                                 \
+        free(field);                                                  \
+        free(row_string);                                             \
+        free(row);                                                    \
+        return (void *)CSV_ERNOMEM;                                   \
+    }                                                                 \
+    fields[fields_count - 1] = field;
+
+#define GROW_FIELD_BUFFER_IF_NEEDED(field, field_size, field_pos) \
+    if (field_pos > field_size - 1)                               \
+    {                                                             \
+        field_size += MAX_FIELD_SIZE;                             \
+        field = (char *)realloc(field, field_size + 1);           \
+        if (field == NULL)                                        \
+        {                                                         \
+            free(fields);                                         \
+            free(row_string);                                     \
+            free(row);                                            \
+            return (void *)CSV_ERNOMEM;                           \
+        }                                                         \
+    }
+
+#define GROW_ROW_BUFFER_IF_NEEDED(row_string, row_len, row_pos)        \
+    if (row_pos > row_len - 1)                                         \
+    {                                                                  \
+        row_string_size += MAX_BUFFER_SIZE;                            \
+        row_string = (char *)realloc(row_string, row_string_size + 1); \
+        if (row_string == NULL)                                        \
+        {                                                              \
+            free(fields);                                              \
+            free(row);                                                 \
+            return (void *)CSV_ERNOMEM;                                \
+        }                                                              \
+    }
 
 ccsv_reader *ccsv_init_reader(ccsv_reader_options *options)
 {
@@ -30,19 +69,19 @@ ccsv_reader *ccsv_init_reader(ccsv_reader_options *options)
     {
         // It is not mandatory to pass all options to options struct
         // So check if the option is passed or not, if not then use the default value
-        if (options->delim == '\0')
+        if (options->delim == CSV_NULL_CHAR)
             delim = DEFAULT_DELIMITER;
 
         else
             delim = options->delim;
 
-        if (options->quote_char == '\0')
+        if (options->quote_char == CSV_NULL_CHAR)
             quote_char = DEFAULT_QUOTE_CHAR;
 
         else
             quote_char = options->quote_char;
 
-        if (options->skip_initial_space == '\0')
+        if (options->skip_initial_space == CSV_NULL_CHAR)
         {
             skip_initial_space = 0;
         }
@@ -56,7 +95,7 @@ ccsv_reader *ccsv_init_reader(ccsv_reader_options *options)
     ccsv_reader *parser = (ccsv_reader *)malloc(sizeof(ccsv_reader));
     if (parser == NULL)
     {
-        return (void *)ENOMEM;
+        return (void *)CSV_ERNOMEM;
     }
     parser->__delim = delim;
     parser->__quote_char = quote_char;
@@ -83,7 +122,7 @@ CSVRow *read_row(FILE *fp, ccsv_reader *reader)
     CSVRow *row = (CSVRow *)malloc(sizeof(CSVRow));
     if (row == NULL)
     {
-        return (void *)ENOMEM;
+        return (void *)CSV_ERNOMEM;
     }
 
     const char DELIM = reader->__delim;
@@ -96,7 +135,7 @@ CSVRow *read_row(FILE *fp, ccsv_reader *reader)
     if (row_string == NULL)
     {
         free(row);
-        return (void *)ENOMEM;
+        return (void *)CSV_ERNOMEM;
     }
     size_t row_string_size = MAX_BUFFER_SIZE;
     size_t row_pos = 0;
@@ -106,7 +145,7 @@ CSVRow *read_row(FILE *fp, ccsv_reader *reader)
     {
         free(row_string);
         free(row);
-        return (void *)ENOMEM;
+        return (void *)CSV_ERNOMEM;
     }
     size_t fields_count = 0;
 
@@ -116,7 +155,7 @@ CSVRow *read_row(FILE *fp, ccsv_reader *reader)
         free(row_string);
         free(fields);
         free(row);
-        return (void *)ENOMEM;
+        return (void *)CSV_ERNOMEM;
     }
     size_t field_size = MAX_FIELD_SIZE;
     size_t field_pos = 0;
@@ -127,38 +166,19 @@ readfile:
     if (fgets(row_string, MAX_BUFFER_SIZE, fp) == NULL)
     {
         // If fields is not empty then return the row
-        if (fields_count > 0)
+        if (fields_count > 0 || field_pos > 0)
         {
             // Add the last field
-            field[field_pos++] = '\0';
-            fields_count++;
-            fields = (char **)realloc(fields, sizeof(char *) * fields_count);
-            if (fields == NULL)
-            {
-                free(field);
-                free(row_string);
-                free(row);
-                return (void *)ENOMEM;
-            }
-            fields[fields_count - 1] = field;
-            goto end;
-        }
-        else if (field_pos > 0)
-        {
+
+            // If fields_count > 0:
+            // This happens when the function holding the values of last row
+            // but yet to return the last row
+
+            // if field_pos > 0:
             // This only happens when there is a single element in the last row and also
             // there is no line after the current line
             // So we need to add the only field of the last row
-            field[field_pos++] = '\0';
-            fields_count++;
-            fields = (char **)realloc(fields, sizeof(char *) * fields_count);
-            if (fields == NULL)
-            {
-                free(field);
-                free(row_string);
-                free(row);
-                return (void *)ENOMEM;
-            }
-            fields[fields_count - 1] = field;
+            ADD_FIELD(field);
             goto end;
         }
 
@@ -182,16 +202,11 @@ readfile:
             {
                 state = INSIDE_QUOTED_FIELD;
             }
-            else if (SKIP_INITIAL_SPACE && c == ' ')
+            else if (SKIP_INITIAL_SPACE && c == CSV_SPACE)
             {
                 state = FIELD_NOT_STARTED;
             }
-            else if (c == DELIM)
-            {
-                row_pos--;
-                state = FIELD_END;
-            }
-            else if (c == '\r' || c == '\n')
+            else if (c == DELIM || c == CSV_CR || c == CSV_LF)
             {
                 state = FIELD_END;
                 row_pos--;
@@ -201,7 +216,6 @@ readfile:
                 state = FIELD_STARTED;
                 field[field_pos++] = c;
             }
-            row_pos++;
             break;
 
         case INSIDE_QUOTED_FIELD:
@@ -215,7 +229,6 @@ readfile:
                 state = FIELD_STARTED;
                 field[field_pos++] = c;
             }
-            row_pos++;
             break;
 
         case FIELD_NOT_STARTED:
@@ -228,7 +241,7 @@ readfile:
                 row_pos--;
                 state = FIELD_END;
             }
-            else if (c == ' ')
+            else if (c == CSV_SPACE)
             {
                 state = FIELD_NOT_STARTED;
             }
@@ -237,35 +250,12 @@ readfile:
                 state = FIELD_STARTED;
                 field[field_pos++] = c;
             }
-            row_pos++;
             break;
 
         case FIELD_STARTED:
-            if (field_pos > field_size - 1)
-            {
-                field_size += MAX_FIELD_SIZE;
-                field = (char *)realloc(field, field_size + 1);
-                if (field == NULL)
-                {
-                    free(row_string);
-                    free(fields);
-                    free(row);
-                    return (void *)ENOMEM;
-                }
-            }
+            GROW_FIELD_BUFFER_IF_NEEDED(field, field_size, field_pos);
+            GROW_ROW_BUFFER_IF_NEEDED(row_string, row_len, row_pos);
 
-            if (row_pos > row_len - 1)
-            {
-                row_string_size += MAX_BUFFER_SIZE;
-                row_string = (char *)realloc(row_string, row_string_size + 1);
-                if (row_string == NULL)
-                {
-                    free(field);
-                    free(fields);
-                    free(row);
-                    return (void *)ENOMEM;
-                }
-            }
             if (c == QUOTE_CHAR && inside_quotes)
             {
                 state = MAY_BE_ESCAPED;
@@ -275,27 +265,18 @@ readfile:
                 state = FIELD_STARTED;
                 field[field_pos++] = c;
             }
-            else if (c == DELIM && !inside_quotes)
+            else if ((c == DELIM && !inside_quotes) ||
+                     ((c == CSV_LF || c == CSV_CR) && !inside_quotes) ||
+                     (c == CSV_NULL_CHAR))
             {
-                row_pos--;
                 state = FIELD_END;
-            }
-            else if ((c == '\n' || c == '\r') && !inside_quotes)
-            {
                 row_pos--;
-                state = FIELD_END;
-            }
-            else if (c == '\0')
-            {
-                row_pos--;
-                state = FIELD_END;
             }
             else
             {
                 state = FIELD_STARTED;
                 field[field_pos++] = c;
             }
-            row_pos++;
             break;
 
         case MAY_BE_ESCAPED:
@@ -311,23 +292,11 @@ readfile:
                 row_pos--;
             }
 
-            row_pos++;
             break;
 
         case FIELD_END:
             state = FIELD_START;
-            field[field_pos++] = '\0';
-            fields_count++;
-            fields = (char **)realloc(fields, sizeof(char *) * fields_count);
-            if (fields == NULL)
-            {
-                free(field);
-                free(row_string);
-                free(row);
-                return (void *)ENOMEM;
-            }
-            fields[fields_count - 1] = field;
-            row_pos++;
+            ADD_FIELD(field);
             field = (char *)malloc(MAX_FIELD_SIZE + 1);
             field_size = MAX_FIELD_SIZE;
             if (field == NULL)
@@ -335,21 +304,22 @@ readfile:
                 free(fields);
                 free(row_string);
                 free(row);
-                return (void *)ENOMEM;
+                return (void *)CSV_ERNOMEM;
             }
             field_pos = 0;
 
-            if (c == '\r' || c == '\n' || c == '\0')
+            if (c == CSV_CR || c == CSV_LF || c == CSV_NULL_CHAR)
             {
                 free(field);
                 goto end;
             }
-
             break;
 
         default:
             break;
         }
+
+        row_pos++;
 
         if (row_pos > row_len - 1)
         {
@@ -380,13 +350,13 @@ ccsv_writer *ccsv_init_writer(ccsv_writer_options *options)
     {
         // It is not mandatory to pass all options to options struct
         // So check if the option is passed or not, if not then use the default value
-        if (options->delim == '\0')
+        if (options->delim == CSV_NULL_CHAR)
             delim = DEFAULT_DELIMITER;
 
         else
             delim = options->delim;
 
-        if (options->quote_char == '\0')
+        if (options->quote_char == CSV_NULL_CHAR)
             quote_char = DEFAULT_QUOTE_CHAR;
 
         else
@@ -397,7 +367,7 @@ ccsv_writer *ccsv_init_writer(ccsv_writer_options *options)
     ccsv_writer *writer = (ccsv_writer *)malloc(sizeof(ccsv_writer));
     if (writer == NULL)
     {
-        return (void *)ENOMEM;
+        return (void *)CSV_ERNOMEM;
     }
     writer->__delim = delim;
     writer->__quote_char = quote_char;
@@ -412,7 +382,7 @@ void write_row(FILE *fp, ccsv_writer *writer, CSVRow *row)
 
     const int fields_count = row->fields_count;
 
-    fputc('\n', fp);
+    fputc(CSV_LF, fp);
     for (int i = 0; i < fields_count; i++)
     {
         char *field = row->fields[i];
@@ -422,7 +392,7 @@ void write_row(FILE *fp, ccsv_writer *writer, CSVRow *row)
         for (int j = 0; j < field_len; j++)
         {
             char c = field[j];
-            if (c == DELIM || c == QUOTE_CHAR || c == '\n' || c == '\r')
+            if (c == DELIM || c == QUOTE_CHAR || c == CSV_CR || c == CSV_LF)
             {
                 inside_quotes = 1;
                 break;
@@ -464,7 +434,7 @@ int write_row_from_string(FILE *fp, ccsv_writer *writer, char *row_string)
     char *string = (char *)malloc(string_len + 1);
     if (string == NULL)
     {
-        return ENOMEM;
+        return CSV_ERNOMEM;
     }
     strcpy(string, row_string);
 
@@ -476,8 +446,8 @@ int write_row_from_string(FILE *fp, ccsv_writer *writer, char *row_string)
             break;
     }
 
-    if ((long long)write_count == -ENOMEM)
-        return ENOMEM;
+    if ((long long)write_count == CSV_ERNOMEM)
+        return CSV_ERNOMEM;
 
     // CRLF - line terminator
     fputs("\r\n", fp);
@@ -506,11 +476,11 @@ size_t _write_field(FILE *fp, ccsv_writer *writer, char *string, size_t string_l
 
         ch = string[current_pos++];
 
-        if (ch == '\0')
+        if (ch == CSV_NULL_CHAR)
         {
             break;
         }
-        else if ((ch == '\n' || ch == '\r') && !inside_quotes)
+        else if ((ch == CSV_CR || ch == CSV_LF) && !inside_quotes)
         {
             break;
         }
@@ -529,10 +499,10 @@ size_t _write_field(FILE *fp, ccsv_writer *writer, char *string, size_t string_l
     char *string_to_write = (char *)malloc(write_count + 1);
     if (string_to_write == NULL)
     {
-        return -1 * ENOMEM;
+        return CSV_ERNOMEM;
     }
     memcpy(string_to_write, string + (*string_pos), write_count);
-    string_to_write[write_count] = '\0';
+    string_to_write[write_count] = CSV_NULL_CHAR;
 
     *string_pos = current_pos;
 

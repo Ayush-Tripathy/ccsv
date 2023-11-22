@@ -31,6 +31,10 @@
         - DEFAULT_QUOTE_CHAR
         - DEFAULT_ESCAPE_SEQUENCE
         - DEFAULT_COMMENT_CHAR
+        - CSV_SUCCESS
+        - CSV_ERROR
+        - CSV_NOMEM
+        - CSV_INVALID
 
     For full documentation, see the README.md file.
 */
@@ -38,20 +42,36 @@
 #pragma once
 
 #include <stdio.h>
-#include <ctype.h>
 
 #ifdef __cplusplus
 extern "C"
 {
 #endif
 
+// Buffer sizes
 #define MAX_BUFFER_SIZE 2048
 #define MAX_FIELD_SIZE 512
 
-#define DEFAULT_DELIMITER ','
-#define DEFAULT_QUOTE_CHAR '"'
+// Default values
+#define CSV_DELIMITER 0x2c
+#define CSV_QUOTE_CHAR 0x22
+#define CSV_CR 0x0d
+#define CSV_LF 0x0a
+#define CSV_SPACE 0x20
+#define CSV_TAB 0x09
+#define CSV_COMMENT_CHAR 0x23
+#define CSV_NULL_CHAR 0x00
+
+#define DEFAULT_DELIMITER CSV_DELIMITER
+#define DEFAULT_QUOTE_CHAR CSV_QUOTE_CHAR
 #define DEFAULT_ESCAPE_SEQUENCE "\"\""
-#define DEFAULT_COMMENT_CHAR '#'
+#define DEFAULT_COMMENT_CHAR CSV_COMMENT_CHAR
+
+// Return codes
+#define CSV_SUCCESS 0
+#define CSV_ERROR -1
+#define CSV_ERNOMEM -2
+#define CSV_ERINVALID -3
 
     typedef enum State
     {
