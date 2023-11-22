@@ -88,6 +88,8 @@ extern "C"
         char delim;
         char quote_char;
         int skip_initial_space;
+        int skip_empty_lines;
+        int skip_comments;
     } ccsv_reader_options;
 
     typedef struct ccsv_reader
@@ -96,6 +98,8 @@ extern "C"
         char __delim;
         char __quote_char;
         int __skip_initial_space;
+        int __skip_empty_lines;
+        int __skip_comments;
     } ccsv_reader;
 
     typedef struct CSVRow
@@ -126,6 +130,9 @@ extern "C"
 
         params:
             options: pointer to the reader options struct
+
+        returns:
+            ccsv_reader*: pointer to the reader
     */
     ccsv_reader *ccsv_init_reader(ccsv_reader_options *options);
 
@@ -136,6 +143,9 @@ extern "C"
         params:
             fp: file pointer
             parser: pointer to the parser
+
+        returns:
+            CSVRow*: pointer to the CSVRow struct
     */
     CSVRow *read_row(FILE *fp, ccsv_reader *parser);
 
@@ -155,6 +165,9 @@ extern "C"
 
         params:
             options: pointer to the writer options struct
+
+        returns:
+            ccsv_writer*: pointer to the writer
 
     */
     ccsv_writer *ccsv_init_writer(ccsv_writer_options *options);
@@ -176,12 +189,24 @@ extern "C"
             fp: file pointer
             writer: pointer to the writer
             row_string: pointer to the row string
+
+        returns:
+            int: 0, if successful
+                CSV_ERNOMEM, if memory allocation failed
     */
     int write_row_from_string(FILE *fp, ccsv_writer *writer, char *row_string);
 
     // Private functions -----------------------------------------------------------------------
 
-    /* -------- Writer -------- */
+    /*
+        This function frees multiple pointers.
+
+        params:
+            num: number of pointers to free
+            ...: pointers to free
+
+    */
+    void _free_multiple(int num, ...);
 
     /*
         This function writes a field to the file pointer.
