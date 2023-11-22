@@ -67,7 +67,7 @@ extern "C"
     {
         char delim;
         char quote_char;
-        int skip_intial_space;
+        int skip_initial_space;
     } ccsv_reader_options;
 
     typedef struct ccsv_reader
@@ -75,7 +75,7 @@ extern "C"
         int rows_read;
         char __delim;
         char __quote_char;
-        int __skip_intial_space;
+        int __skip_initial_space;
     } ccsv_reader;
 
     typedef struct CSVRow
@@ -157,7 +157,7 @@ extern "C"
             writer: pointer to the writer
             row_string: pointer to the row string
     */
-    void write_row_from_string(FILE *fp, ccsv_writer *writer, char *row_string);
+    int write_row_from_string(FILE *fp, ccsv_writer *writer, char *row_string);
 
     // Private functions -----------------------------------------------------------------------
 
