@@ -35,6 +35,11 @@
         - CSV_ERROR
         - CSV_NOMEM
         - CSV_INVALID
+        - WRITE_SUCCESS
+        - WRITE_ERNOTSTARTED
+        - WRITE_ERNOMEM
+        - WRITE_ERINVALID
+        - WRITE_ERALWRITING
 
     For full documentation, see the README.md file.
 */
@@ -73,6 +78,31 @@ extern "C"
 #define CSV_ERNOMEM -2
 #define CSV_ERINVALID -3
 
+#define WRITE_SUCCESS CSV_SUCCESS
+#define WRITE_STARTED 1
+#define WRITE_ENDED 2
+#define WRITE_ERNOTSTARTED -4 /* Writer not started */
+#define WRITE_ERNOMEM -5
+#define WRITE_ERINVALID CSV_ERINVALID
+#define WRITE_ERALWRITING -7 /* Already writing field */
+
+// Writer Macros
+/* Start new row */
+#define CSV_WRITE_ROW_START(fp, writer) _write_row_start(fp, writer)
+
+/* Write field */
+#define CSV_WRITE_FIELD(fp, writer, string) \
+    _write_field(fp, writer, string);       \
+    fputc(writer->__delim, fp);
+
+/* End row, with an additional field */
+#define CSV_WRITE_ROW_END(fp, writer, last_field) \
+    if (last_field)                               \
+    {                                             \
+        _write_field(fp, writer, last_field);     \
+    }                                             \
+    _write_row_end(fp, writer);
+
     typedef enum State
     {
         FIELD_START,
@@ -83,10 +113,19 @@ extern "C"
         MAY_BE_ESCAPED
     } State;
 
+    typedef enum WriterState
+    {
+        WRITER_NOT_STARTED,
+        WRITER_ROW_START,
+        WRITER_WRITING_FIELD,
+        WRITER_ROW_END
+    } WriterState;
+
     typedef struct ccsv_reader_options
     {
         char delim;
         char quote_char;
+        char comment_char;
         int skip_initial_space;
         int skip_empty_lines;
         int skip_comments;
@@ -97,6 +136,7 @@ extern "C"
         int rows_read;
         char __delim;
         char __quote_char;
+        char __comment_char;
         int __skip_initial_space;
         int __skip_empty_lines;
         int __skip_comments;
@@ -118,6 +158,8 @@ extern "C"
     {
         char __delim;
         char __quote_char;
+        WriterState __state;
+        short write_status;
     } ccsv_writer;
 
     // Public functions ------------------------------------------------------------------------
@@ -178,9 +220,9 @@ extern "C"
         params:
             fp: file pointer
             writer: pointer to the writer
-            row: pointer to the CSVRow struct
+            row: CSVRow struct
     */
-    void write_row(FILE *fp, ccsv_writer *writer, CSVRow *row);
+    int write_row(FILE *fp, ccsv_writer *writer, CSVRow row);
 
     /*
         This function writes a row (from string) to the file pointer.
@@ -194,7 +236,7 @@ extern "C"
             int: 0, if successful
                 CSV_ERNOMEM, if memory allocation failed
     */
-    int write_row_from_string(FILE *fp, ccsv_writer *writer, char *row_string);
+    int write_row_from_array(FILE *fp, ccsv_writer *writer, char **fields, int row_len);
 
     // Private functions -----------------------------------------------------------------------
 
@@ -221,7 +263,33 @@ extern "C"
         returns:
             size_t: number of characters written
     */
-    size_t _write_field(FILE *fp, ccsv_writer *writer, char *string, size_t string_len, size_t *string_pos);
+    int _write_field(FILE *fp, ccsv_writer *writer, const char *string);
+
+    /*
+        This function writes a row start to the file pointer.
+
+        params:
+            fp: file pointer
+            writer: pointer to the writer
+
+        returns:
+            int: WRITE_STARTED, if successful
+            int: WRITE_ERALWRITING, if already writing field
+    */
+    int _write_row_start(FILE *fp, ccsv_writer *writer);
+
+    /*
+        This function writes a row end to the file pointer.
+
+        params:
+            fp: file pointer
+            writer: pointer to the writer
+
+        returns:
+            int: WRITE_ENDED, if successful
+            int: WRITE_ERNOTSTARTED, if writer not started
+    */
+    int _write_row_end(FILE *fp, ccsv_writer *writer);
 
 #ifdef __cplusplus
 }

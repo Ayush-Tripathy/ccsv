@@ -13,14 +13,26 @@ int main(void)
         exit(1);
     }
 
+    /*
+    ------- Way 1 -------
     ccsv_reader_options *options = (ccsv_reader_options *)malloc(sizeof(ccsv_reader_options));
     options->delim = ',';
     options->quote_char = '"';
-    options->skip_intial_space = 0;
+    options->skip_initial_space = 0;
+    */
+
+    /* OR */
+
+    ccsv_reader_options options = {
+        .delim = ',',
+        .quote_char = '"',
+        .skip_initial_space = 0,
+        .skip_empty_lines = 1,
+        .skip_comments = 1};
 
     // Reader object
-    ccsv_reader *reader = ccsv_init_reader(options); // NULL for default options
-    free(options);
+    ccsv_reader *reader = ccsv_init_reader(&options); // NULL for default options
+    // free(options); /* If you used Way 1 */
 
     CSVRow *row;
 
@@ -30,7 +42,7 @@ int main(void)
         int row_len = row->fields_count; // Get number of fields in the row
         for (int i = 0; i < row_len; i++)
         {
-            printf("%d.Field: %s\n", i + 1, row->fields[i]); // Print each field
+            printf("%s\t", row->fields[i]); // Print each field
         }
         printf("\n");
         free_row(row); // Free the memory allocated to the row

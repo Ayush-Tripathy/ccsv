@@ -20,6 +20,8 @@ int main(void)
         delim = ','
         quote_char = '"'
         skip_initial_space = 0
+        skip_empty_lines = 0
+        skip_comments = 0
     */
 
     CSVRow *row;

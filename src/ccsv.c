@@ -11,6 +11,11 @@
 #include <string.h>
 #include <stdarg.h>
 
+// #define _POSIX1_SOURCE 2
+// #include <unistd.h>
+
+// int ftruncate(int fildes, off_t length);
+
 // ccsv header file
 #include "ccsv.h"
 
@@ -51,14 +56,19 @@
         }                                                              \
     }
 
+#define RETURN_IF_WRITE_ERROR(writer, desired_status) \
+    if (writer->write_status != desired_status)       \
+        return writer->write_status;
+
 ccsv_reader *ccsv_init_reader(ccsv_reader_options *options)
 {
-    char delim, quote_char;
+    char delim, quote_char, comment_char;
     int skip_initial_space, skip_empty_lines, skip_comments;
     if (options == NULL)
     {
         delim = DEFAULT_DELIMITER;
         quote_char = DEFAULT_QUOTE_CHAR;
+        comment_char = DEFAULT_COMMENT_CHAR;
         skip_initial_space = 0;
         skip_empty_lines = 0;
         skip_comments = 0;
@@ -78,6 +88,12 @@ ccsv_reader *ccsv_init_reader(ccsv_reader_options *options)
 
         else
             quote_char = options->quote_char;
+
+        if (options->comment_char == CSV_NULL_CHAR)
+            comment_char = DEFAULT_COMMENT_CHAR;
+
+        else
+            comment_char = options->comment_char;
 
         if (options->skip_initial_space == CSV_NULL_CHAR)
             skip_initial_space = 0;
@@ -106,6 +122,7 @@ ccsv_reader *ccsv_init_reader(ccsv_reader_options *options)
     }
     parser->__delim = delim;
     parser->__quote_char = quote_char;
+    parser->__comment_char = comment_char;
     parser->__skip_initial_space = skip_initial_space;
     parser->__skip_empty_lines = skip_empty_lines;
     parser->__skip_comments = skip_comments;
@@ -150,6 +167,7 @@ CSVRow *read_row(FILE *fp, ccsv_reader *reader)
 
     const char DELIM = reader->__delim;
     const char QUOTE_CHAR = reader->__quote_char;
+    const char COMMENT_CHAR = reader->__comment_char;
     const int SKIP_INITIAL_SPACE = reader->__skip_initial_space;
     const int SKIP_EMPTY_LINES = reader->__skip_empty_lines;
     const int SKIP_COMMENTS = reader->__skip_comments;
@@ -346,7 +364,7 @@ readfile:
             else if (SKIP_COMMENTS &&
                      fields_count == 0 &&
                      field_pos > 0 &&
-                     field[0] == CSV_COMMENT_CHAR &&
+                     field[0] == COMMENT_CHAR &&
                      !inside_quotes)
             {
                 /* Do not return comment lines, parse again */
@@ -399,6 +417,7 @@ end:
 ccsv_writer *ccsv_init_writer(ccsv_writer_options *options)
 {
     char delim, quote_char;
+    WriterState state = WRITER_NOT_STARTED;
     if (options == NULL)
     {
         delim = DEFAULT_DELIMITER;
@@ -429,124 +448,169 @@ ccsv_writer *ccsv_init_writer(ccsv_writer_options *options)
     }
     writer->__delim = delim;
     writer->__quote_char = quote_char;
+    writer->__state = state;
 
     return writer;
 }
 
-void write_row(FILE *fp, ccsv_writer *writer, CSVRow *row)
+int write_row(FILE *fp, ccsv_writer *writer, CSVRow row)
 {
-    const char DELIM = writer->__delim;
-    const char QUOTE_CHAR = writer->__quote_char;
-
-    const int fields_count = row->fields_count;
-
-    fputc(CSV_LF, fp);
-    for (int i = 0; i < fields_count; i++)
-    {
-        char *field = row->fields[i];
-        int field_len = strlen(field);
-
-        int inside_quotes = 0;
-        for (int j = 0; j < field_len; j++)
-        {
-            char c = field[j];
-            if (c == DELIM || c == QUOTE_CHAR || c == CSV_CR || c == CSV_LF)
-            {
-                inside_quotes = 1;
-                break;
-            }
-        }
-
-        if (inside_quotes)
-        {
-            fputc(QUOTE_CHAR, fp);
-            for (int j = 0; j < field_len; j++)
-            {
-                char c = field[j];
-                /* Escape the quote character */
-                if (c == QUOTE_CHAR)
-                {
-                    fputc(QUOTE_CHAR, fp);
-                }
-                fputc(c, fp);
-            }
-            fputc(QUOTE_CHAR, fp);
-        }
-        else
-        {
-            fputs(field, fp);
-        }
-
-        if (i != fields_count - 1)
-        {
-            fputc(DELIM, fp);
-        }
-    }
+    const int fields_count = row.fields_count;
+    char **fields = row.fields;
+    return (write_row_from_array(fp, writer, fields, fields_count));
 }
 
-int write_row_from_string(FILE *fp, ccsv_writer *writer, char *row_string)
+int write_row_from_array(FILE *fp, ccsv_writer *writer, char **fields, int row_len)
 {
-    // Example string - "hi,hello,  \"hello, world!\", bye";
+    CSV_WRITE_ROW_START(fp, writer);
+    RETURN_IF_WRITE_ERROR(writer, WRITE_STARTED);
 
-    size_t string_len = strlen(row_string);
-    size_t string_pos = 0, write_count;
-
-    while ((write_count = _write_field(fp, writer, row_string, string_len, &string_pos)) > 0)
+    int i;
+    for (i = 0; i < row_len - 1; i++)
     {
-        if (string_len == 0)
-            break;
+        const char *field = fields[i];
+        CSV_WRITE_FIELD(fp, writer, field);
+        RETURN_IF_WRITE_ERROR(writer, WRITE_SUCCESS);
     }
+    CSV_WRITE_ROW_END(fp, writer, fields[i]); /* End with writing last field */
+    RETURN_IF_WRITE_ERROR(writer, WRITE_ENDED);
 
-    if ((long long)write_count == CSV_ERNOMEM)
-        return CSV_ERNOMEM;
-
-    /* CRLF - line terminator */
-    fputc(CSV_CR, fp);
-    fputc(CSV_LF, fp);
-
-    return 0;
+    writer->write_status = WRITE_SUCCESS;
+    return WRITE_SUCCESS;
 }
 
-size_t _write_field(FILE *fp, ccsv_writer *writer, char *string, size_t string_len, size_t *string_pos)
+int _write_row_start(FILE *fp, ccsv_writer *writer)
 {
+    switch (writer->__state)
+    {
+    case WRITER_NOT_STARTED:
+        writer->__state = WRITER_ROW_START; /* Start writing row */
+
+        /* Move the file pointer to the end to get the file size */
+        fseek(fp, 0, SEEK_END);
+        long file_size = ftell(fp);
+
+        /* Move the pointer to the penultimate position */
+        fseek(fp, -1, SEEK_END);
+
+        char last_char = fgetc(fp);
+
+        if (last_char != CSV_LF && last_char != CSV_CR && file_size > 0)
+        {
+            fputc(CSV_CR, fp);
+            fputc(CSV_LF, fp);
+        }
+
+        /* Rewind the file pointer */
+        fseek(fp, -file_size, SEEK_END);
+        break;
+
+    case WRITER_ROW_END:
+        writer->__state = WRITER_ROW_START; /* Start writing row */
+        break;
+
+    case WRITER_WRITING_FIELD:
+    case WRITER_ROW_START:
+        writer->__state = WRITER_ROW_END;
+        writer->write_status = WRITE_ERALWRITING; /* Already writing field */
+        return WRITE_ERALWRITING;
+
+    default:
+        break;
+    }
+
+    writer->write_status = WRITE_STARTED;
+    return WRITE_STARTED;
+}
+
+int _write_row_end(FILE *fp, ccsv_writer *writer)
+{
+    switch (writer->__state)
+    {
+    case WRITER_NOT_STARTED:
+        writer->__state = WRITER_ROW_END;
+        writer->write_status = WRITE_ERNOTSTARTED; /* Not started writing, CSV_WRITE_ROW_START() not called */
+        return WRITE_ERNOTSTARTED;
+
+    case WRITER_ROW_START:
+    case WRITER_WRITING_FIELD:
+        writer->__state = WRITER_ROW_END;
+
+        // TODO: Handle removal of last character in append mode
+
+        // long currentPos = ftell(fp);
+
+        // // If the file is not empty
+        // if (currentPos > 0)
+        // {
+        //     fseek(fp, -1, SEEK_END);
+        //     ftruncate(fileno(fp), currentPos - 1); /* Truncate the file at this position */
+        // }
+        // fseek(fp, -1, SEEK_CUR);
+        fputc(CSV_CR, fp);
+        fputc(CSV_LF, fp);
+        break;
+
+    case WRITER_ROW_END:
+        writer->__state = WRITER_NOT_STARTED; /* Reset the state */
+        break;
+
+    default:
+        break;
+    }
+
+    writer->write_status = WRITE_ENDED;
+    return WRITE_ENDED;
+}
+
+int _write_field(FILE *fp, ccsv_writer *writer, const char *string)
+{
+    WriterState state = writer->__state;
+    if (state != WRITER_ROW_START && state != WRITER_WRITING_FIELD)
+    {
+        /* Not started writing, CSV_WRITE_ROW_START() not called */
+        writer->write_status = WRITE_ERNOTSTARTED;
+        return WRITE_ERNOTSTARTED;
+    }
+
     const char DELIM = writer->__delim;
     const char QUOTE_CHAR = writer->__quote_char;
 
     int inside_quotes = 0;
-    size_t write_count = 0;
+
+    size_t string_len = strlen(string);
 
     char ch;
-    size_t current_pos = *string_pos;
-
-    while (1)
+    for (size_t i = 0; i < string_len; i++)
     {
-        if (current_pos > string_len - 1)
+        ch = string[i];
+        if (ch == DELIM || ch == QUOTE_CHAR || ch == CSV_CR || ch == CSV_LF)
+        {
+            inside_quotes = 1;
             break;
-
-        ch = string[current_pos++];
-
-        if (ch == CSV_NULL_CHAR)
-            break;
-        else if ((ch == CSV_CR || ch == CSV_LF) && !inside_quotes)
-            break;
-        else if (ch == QUOTE_CHAR)
-            inside_quotes = !inside_quotes;
-        else if (ch == DELIM && !inside_quotes)
-            break;
+        }
     }
 
-    write_count = current_pos - (*string_pos);
+    if (inside_quotes)
+    {
+        fputc(QUOTE_CHAR, fp);
+        for (size_t i = 0; i < string_len; i++)
+        {
+            ch = string[i];
+            /* Escape the quote character */
+            if (ch == QUOTE_CHAR)
+            {
+                fputc(QUOTE_CHAR, fp);
+            }
+            fputc(ch, fp);
+        }
+        fputc(QUOTE_CHAR, fp);
+    }
+    else
+    {
+        fputs(string, fp);
+    }
 
-    char *string_to_write = (char *)malloc(write_count + 1);
-    if (string_to_write == NULL)
-        return CSV_ERNOMEM; /* Memory allocation error */
-
-    memcpy(string_to_write, string + (*string_pos), write_count);
-    string_to_write[write_count] = CSV_NULL_CHAR;
-
-    *string_pos = current_pos;
-
-    fputs(string_to_write, fp);
-    free(string_to_write);
-    return write_count;
+    writer->write_status = WRITE_SUCCESS;
+    return WRITE_SUCCESS;
 }
