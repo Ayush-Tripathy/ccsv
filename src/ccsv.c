@@ -4,31 +4,84 @@
 // github.com/Ayush-Tripathy
 
 /*
-    This library provides functions to handle reading, writing csv files.
-*/
+ * This library provides functions to handle reading, writing csv files.
+ */
 
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
 
-// #define _POSIX1_SOURCE 2
-// #include <unistd.h>
-
-// int ftruncate(int fildes, off_t length);
-
 // ccsv header file
 #include "ccsv.h"
 
+char *status_messages[] = {
+    "Success",
+    "Error",
+    "Memory allocation failure.",
+    "Malformed CSV file.",
+    "Not started writing, CSV_WRITE_ROW_START() not called.",
+    "Already writing field, CSV_WRITE_ROW_START() already called."};
+
+char *ccsv_get_status_message(short status)
+{
+    if (status > 0)
+        return status_messages[0];
+
+    if (status < -5)
+        return NULL;
+    return status_messages[-1 * status];
+}
+
+int _get_object_type(void *obj)
+{
+    if (obj == NULL)
+        return CCSV_NULL_CHAR;
+
+    if (((ccsv_reader *)obj)->object_type == CCSV_READER)
+        return CCSV_READER;
+
+    if (((ccsv_writer *)obj)->object_type == CCSV_WRITER)
+        return CCSV_WRITER;
+
+    return CCSV_NULL_CHAR;
+}
+
+int ccsv_is_error(void *obj, short *status)
+{
+    if (obj == NULL)
+        return 0;
+
+    if (_get_object_type(obj) == CCSV_READER)
+    {
+        short __status = ((ccsv_reader *)obj)->status;
+        if (status != NULL)
+            *status = __status;
+        return __status < 0;
+    }
+
+    if (_get_object_type(obj) == CCSV_WRITER)
+    {
+        short __status = ((ccsv_writer *)obj)->write_status;
+        if (status != NULL)
+            *status = __status;
+        return __status < 0;
+    }
+
+    return 0;
+}
+
 /* Reader */
 
+// These macros should be used only in read_row() function
 #define ADD_FIELD(field)                                              \
-    field[field_pos++] = CSV_NULL_CHAR;                               \
+    field[field_pos++] = CCSV_NULL_CHAR;                              \
     fields_count++;                                                   \
     fields = (char **)realloc(fields, sizeof(char *) * fields_count); \
     if (fields == NULL)                                               \
     {                                                                 \
         _free_multiple(3, field, row_string, row);                    \
-        return (void *)CSV_ERNOMEM;                                   \
+        reader->status = CCSV_ERNOMEM;                                \
+        return (void *)CCSV_ERNOMEM;                                  \
     }                                                                 \
     fields[fields_count - 1] = field;
 
@@ -40,7 +93,8 @@
         if (field == NULL)                                        \
         {                                                         \
             _free_multiple(3, fields, row_string, row);           \
-            return (void *)CSV_ERNOMEM;                           \
+            reader->status = CCSV_ERNOMEM;                        \
+            return (void *)CCSV_ERNOMEM;                          \
         }                                                         \
     }
 
@@ -52,7 +106,8 @@
         if (row_string == NULL)                                        \
         {                                                              \
             _free_multiple(2, fields, row);                            \
-            return (void *)CSV_ERNOMEM;                                \
+            reader->status = CCSV_ERNOMEM;                             \
+            return (void *)CCSV_ERNOMEM;                               \
         }                                                              \
     }
 
@@ -77,37 +132,37 @@ ccsv_reader *ccsv_init_reader(ccsv_reader_options *options)
     {
         // It is not mandatory to pass all options to options struct
         // So check if the option is passed or not, if not then use the default value
-        if (options->delim == CSV_NULL_CHAR)
+        if (options->delim == CCSV_NULL_CHAR)
             delim = DEFAULT_DELIMITER;
 
         else
             delim = options->delim;
 
-        if (options->quote_char == CSV_NULL_CHAR)
+        if (options->quote_char == CCSV_NULL_CHAR)
             quote_char = DEFAULT_QUOTE_CHAR;
 
         else
             quote_char = options->quote_char;
 
-        if (options->comment_char == CSV_NULL_CHAR)
+        if (options->comment_char == CCSV_NULL_CHAR)
             comment_char = DEFAULT_COMMENT_CHAR;
 
         else
             comment_char = options->comment_char;
 
-        if (options->skip_initial_space == CSV_NULL_CHAR)
+        if (options->skip_initial_space == CCSV_NULL_CHAR)
             skip_initial_space = 0;
 
         else
             skip_initial_space = options->skip_initial_space;
 
-        if (options->skip_empty_lines == CSV_NULL_CHAR)
+        if (options->skip_empty_lines == CCSV_NULL_CHAR)
             skip_empty_lines = 0;
 
         else
             skip_empty_lines = options->skip_empty_lines;
 
-        if (options->skip_comments == CSV_NULL_CHAR)
+        if (options->skip_comments == CCSV_NULL_CHAR)
             skip_comments = 0;
 
         else
@@ -118,7 +173,7 @@ ccsv_reader *ccsv_init_reader(ccsv_reader_options *options)
     ccsv_reader *parser = (ccsv_reader *)malloc(sizeof(ccsv_reader));
     if (parser == NULL)
     {
-        return (void *)CSV_ERNOMEM;
+        return (void *)CCSV_ERNOMEM;
     }
     parser->__delim = delim;
     parser->__quote_char = quote_char;
@@ -128,6 +183,8 @@ ccsv_reader *ccsv_init_reader(ccsv_reader_options *options)
     parser->__skip_comments = skip_comments;
 
     parser->rows_read = 0;
+    parser->status = CCSV_SUCCESS;
+    parser->object_type = CCSV_READER;
 
     return parser;
 }
@@ -162,7 +219,8 @@ CSVRow *read_row(FILE *fp, ccsv_reader *reader)
     CSVRow *row = (CSVRow *)malloc(sizeof(CSVRow));
     if (row == NULL)
     {
-        return (void *)CSV_ERNOMEM;
+        reader->status = CCSV_ERNOMEM;
+        return (void *)CCSV_ERNOMEM;
     }
 
     const char DELIM = reader->__delim;
@@ -178,7 +236,8 @@ CSVRow *read_row(FILE *fp, ccsv_reader *reader)
     if (row_string == NULL)
     {
         _free_multiple(1, row);
-        return (void *)CSV_ERNOMEM;
+        reader->status = CCSV_ERNOMEM;
+        return (void *)CCSV_ERNOMEM;
     }
     size_t row_string_size = MAX_BUFFER_SIZE;
     size_t row_pos = 0;
@@ -187,7 +246,8 @@ CSVRow *read_row(FILE *fp, ccsv_reader *reader)
     if (fields == NULL)
     {
         _free_multiple(2, row_string, row);
-        return (void *)CSV_ERNOMEM;
+        reader->status = CCSV_ERNOMEM;
+        return (void *)CCSV_ERNOMEM;
     }
     size_t fields_count = 0;
 
@@ -195,7 +255,8 @@ CSVRow *read_row(FILE *fp, ccsv_reader *reader)
     if (field == NULL)
     {
         _free_multiple(3, row_string, fields, row);
-        return (void *)CSV_ERNOMEM;
+        reader->status = CCSV_ERNOMEM;
+        return (void *)CCSV_ERNOMEM;
     }
     size_t field_size = MAX_FIELD_SIZE;
     size_t field_pos = 0;
@@ -211,14 +272,14 @@ readfile:
             /* Add the last field */
 
             /*
-                If fields_count > 0:
-                This happens when the function holding the values of last row
-                but yet to return the last row
-
-                if field_pos > 0:
-                This only happens when there is a single element in the last row and also
-                there is no line after the current line
-                So we need to add the only field of the last row
+             * If fields_count > 0:
+             * This happens when the function holding the values of last row
+             * but yet to return the last row
+             *
+             * if field_pos > 0:
+             * This only happens when there is a single element in the last row and also
+             * there is no line after the current line
+             * So we need to add the only field of the last row
              */
             ADD_FIELD(field);
             goto end;
@@ -242,12 +303,12 @@ readfile:
                 /* Start of quoted field */
                 state = INSIDE_QUOTED_FIELD;
             }
-            else if (SKIP_INITIAL_SPACE && c == CSV_SPACE)
+            else if (SKIP_INITIAL_SPACE && c == CCSV_SPACE)
             {
                 /* Skip initial spaces */
                 state = FIELD_NOT_STARTED;
             }
-            else if (c == DELIM || c == CSV_CR || c == CSV_LF)
+            else if (c == DELIM || c == CCSV_CR || c == CCSV_LF)
             {
                 /* Return empty field or empty row */
                 state = FIELD_END;
@@ -286,12 +347,12 @@ readfile:
                 row_pos--;
                 state = FIELD_END;
             }
-            else if (c == CSV_SPACE)
+            else if (c == CCSV_SPACE)
             {
                 /*
-                    Skip initial spaces, will only get to this point if
-                    skip_initial_spaces = 1
-                */
+                 * Skip initial spaces, will only get to this point if
+                 * skip_initial_spaces = 1
+                 */
                 state = FIELD_NOT_STARTED;
             }
             else
@@ -318,8 +379,8 @@ readfile:
                 field[field_pos++] = c;
             }
             else if ((c == DELIM && !inside_quotes) ||
-                     ((c == CSV_LF || c == CSV_CR) && !inside_quotes) ||
-                     (c == CSV_NULL_CHAR))
+                     ((c == CCSV_LF || c == CCSV_CR) && !inside_quotes) ||
+                     (c == CCSV_NULL_CHAR))
             {
                 /* End of field */
                 state = FIELD_END;
@@ -355,7 +416,7 @@ readfile:
             if (SKIP_EMPTY_LINES &&
                 fields_count == 0 &&
                 field_pos == 0 &&
-                (c == CSV_CR || c == CSV_LF || c == CSV_NULL_CHAR) &&
+                (c == CCSV_CR || c == CCSV_LF || c == CCSV_NULL_CHAR) &&
                 !inside_quotes)
             {
                 /* Do not return empty lines, parse again */
@@ -380,11 +441,12 @@ readfile:
             if (field == NULL)
             {
                 _free_multiple(3, fields, row_string, row);
-                return (void *)CSV_ERNOMEM;
+                reader->status = CCSV_ERNOMEM;
+                return (void *)CCSV_ERNOMEM;
             }
             field_pos = 0;
 
-            if (c == CSV_CR || c == CSV_LF || c == CSV_NULL_CHAR)
+            if (c == CCSV_CR || c == CCSV_LF || c == CCSV_NULL_CHAR)
             {
                 free(field);
                 goto end;
@@ -409,6 +471,7 @@ end:
     free(row_string);
 
     reader->rows_read++;
+    reader->status = CCSV_SUCCESS;
     return row;
 }
 
@@ -427,13 +490,13 @@ ccsv_writer *ccsv_init_writer(ccsv_writer_options *options)
     {
         // It is not mandatory to pass all options to options struct
         // So check if the option is passed or not, if not then use the default value
-        if (options->delim == CSV_NULL_CHAR)
+        if (options->delim == CCSV_NULL_CHAR)
             delim = DEFAULT_DELIMITER;
 
         else
             delim = options->delim;
 
-        if (options->quote_char == CSV_NULL_CHAR)
+        if (options->quote_char == CCSV_NULL_CHAR)
             quote_char = DEFAULT_QUOTE_CHAR;
 
         else
@@ -444,11 +507,14 @@ ccsv_writer *ccsv_init_writer(ccsv_writer_options *options)
     ccsv_writer *writer = (ccsv_writer *)malloc(sizeof(ccsv_writer));
     if (writer == NULL)
     {
-        return (void *)CSV_ERNOMEM;
+        return (void *)CCSV_ERNOMEM;
     }
     writer->__delim = delim;
     writer->__quote_char = quote_char;
     writer->__state = state;
+
+    writer->write_status = WRITER_NOT_STARTED;
+    writer->object_type = CCSV_WRITER;
 
     return writer;
 }
@@ -462,17 +528,16 @@ int write_row(FILE *fp, ccsv_writer *writer, CSVRow row)
 
 int write_row_from_array(FILE *fp, ccsv_writer *writer, char **fields, int row_len)
 {
-    CSV_WRITE_ROW_START(fp, writer);
+    CCSV_WRITE_ROW_START(fp, writer);
     RETURN_IF_WRITE_ERROR(writer, WRITE_STARTED);
 
-    int i;
-    for (i = 0; i < row_len - 1; i++)
+    for (int i = 0; i < row_len; i++)
     {
         const char *field = fields[i];
-        CSV_WRITE_FIELD(fp, writer, field);
+        CCSV_WRITE_FIELD(fp, writer, field);
         RETURN_IF_WRITE_ERROR(writer, WRITE_SUCCESS);
     }
-    CSV_WRITE_ROW_END(fp, writer, fields[i]); /* End with writing last field */
+    CCSV_WRITE_ROW_END(fp, writer, NULL);
     RETURN_IF_WRITE_ERROR(writer, WRITE_ENDED);
 
     writer->write_status = WRITE_SUCCESS;
@@ -495,10 +560,10 @@ int _write_row_start(FILE *fp, ccsv_writer *writer)
 
         char last_char = fgetc(fp);
 
-        if (last_char != CSV_LF && last_char != CSV_CR && file_size > 0)
+        if (last_char != CCSV_LF && last_char != CCSV_CR && file_size > 0)
         {
-            fputc(CSV_CR, fp);
-            fputc(CSV_LF, fp);
+            fputc(CCSV_CR, fp);
+            fputc(CCSV_LF, fp);
         }
 
         /* Rewind the file pointer */
@@ -535,20 +600,8 @@ int _write_row_end(FILE *fp, ccsv_writer *writer)
     case WRITER_ROW_START:
     case WRITER_WRITING_FIELD:
         writer->__state = WRITER_ROW_END;
-
-        // TODO: Handle removal of last character in append mode
-
-        // long currentPos = ftell(fp);
-
-        // // If the file is not empty
-        // if (currentPos > 0)
-        // {
-        //     fseek(fp, -1, SEEK_END);
-        //     ftruncate(fileno(fp), currentPos - 1); /* Truncate the file at this position */
-        // }
-        // fseek(fp, -1, SEEK_CUR);
-        fputc(CSV_CR, fp);
-        fputc(CSV_LF, fp);
+        fputc(CCSV_CR, fp);
+        fputc(CCSV_LF, fp);
         break;
 
     case WRITER_ROW_END:
@@ -584,7 +637,7 @@ int _write_field(FILE *fp, ccsv_writer *writer, const char *string)
     for (size_t i = 0; i < string_len; i++)
     {
         ch = string[i];
-        if (ch == DELIM || ch == QUOTE_CHAR || ch == CSV_CR || ch == CSV_LF)
+        if (ch == DELIM || ch == QUOTE_CHAR || ch == CCSV_CR || ch == CCSV_LF)
         {
             inside_quotes = 1;
             break;

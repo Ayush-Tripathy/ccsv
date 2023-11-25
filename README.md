@@ -1,5 +1,7 @@
 # ccsv
-Simple, not slow CSV parsing library for C
+Fast, flexible, easy-to-use CSV reading, writing library for C
+
+For full documentation, see the [docs](https://github.com/Ayush-Tripathy/ccsv/tree/main/docs)
 
 ## Usage
 ### Create a reader object
@@ -11,18 +13,15 @@ ccsv_reader *reader = ccsv_init_reader(NULL); // NULL for default options
 ### Create a reader object with custom options
 
 ```c
-ccsv_options *options = malloc(sizeof(ccsv_options));
-
-options->delim = ','; // Specify the delimiter
-options->quote_char = '"'; // Specify the quote character
-options->skip_initial_space = 1; // Specify if you want to skip the initial space after the delimiter
+ccsv_reader_options options = {
+        .delim = ',',
+        .quote_char = '"',
+        .skip_initial_space = 0,
+        .skip_empty_lines = 1,
+        .skip_comments = 1};
 
 // Initialize the reader with the options
-ccsv_reader *reader = ccsv_init_reader(options);
-// After initializing the reader, you can
-free(options); // Free the memory allocated to the options
-
-
+ccsv_reader *reader = ccsv_init_reader(&options);
 ```
 
 
@@ -68,7 +67,7 @@ free(reader);
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "../include/ccsv.h"
+#include "ccsv.h"
 
 int main(void)
 {
@@ -108,6 +107,9 @@ int main(void)
 #### You can find more examples in the `examples` folder
 
 Compile with `make ./example_file_name`
+
+
+For full documentation, see the [docs](https://github.com/Ayush-Tripathy/ccsv/tree/main/docs)
 
 
 ## Feel free to contribute!

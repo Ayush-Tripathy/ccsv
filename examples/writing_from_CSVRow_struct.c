@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "../include/ccsv.h"
+#include "ccsv.h"
 
 int main(void)
 {
@@ -14,7 +14,7 @@ int main(void)
 
     // Initialize the writer
     ccsv_writer *writer = ccsv_init_writer(&options);
-    if (writer == NULL || writer == (void *)CSV_ERNOMEM)
+    if (writer == NULL || writer == (void *)CCSV_ERNOMEM)
     {
         fprintf(stderr, "Error initializing CSV writer\n");
         return 1;
@@ -38,14 +38,12 @@ int main(void)
     }
 
     CSVRow *row = read_row(source_file, reader);
-
-    // Write row to file
     write_row(dest_file, writer, *row); // Pass the value of the row pointer
 
     row = read_row(source_file, reader); // Read the next row
     write_row(dest_file, writer, *row);  // Write row to file
 
-    if (writer->write_status != WRITE_SUCCESS)
+    if (ccsv_is_error(writer, NULL))
     {
         fprintf(stderr, "Error writing CSV row.\n");
         fclose(dest_file);

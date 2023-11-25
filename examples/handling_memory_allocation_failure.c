@@ -20,7 +20,7 @@ int main(void)
     };
 
     ccsv_reader *reader = ccsv_init_reader(&options);
-    if (reader == (void *)CSV_ERNOMEM)
+    if (reader == (void *)CCSV_ERNOMEM)
     {
         fprintf(stderr, "Error initializing CSV reader\n");
         fclose(csv_file);
@@ -35,7 +35,7 @@ int main(void)
         {
             break;
         }
-        else if (row == (void *)CSV_ERNOMEM)
+        else if (row == (void *)CCSV_ERNOMEM)
         {
             fprintf(stderr, "Memory allocation failure while reading row\n");
             break;

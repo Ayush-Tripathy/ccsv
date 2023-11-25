@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include "../include/ccsv.h"
+
+#include "ccsv.h"
 
 int main(void)
 {
@@ -19,7 +20,7 @@ int main(void)
         return 1;
     }
 
-    FILE *file = fopen("output.csv", "a+");
+    FILE *file = fopen("output.csv", "w+");
     if (file == NULL)
     {
         fprintf(stderr, "Error opening file\n");
@@ -27,9 +28,11 @@ int main(void)
         return 1;
     }
 
-    char *row_string[] = {"hi", "hello", "hello, world!", "\"escapedword\"", "hola", "bonjour"};
-
-    write_row_from_array(file, writer, row_string, ARRAY_LEN(row_string)); /* Write row to file */
+    CCSV_WRITE_ROW_START(file, writer);                // Write row start
+    CCSV_WRITE_FIELD(file, writer, "hi");              // Write field
+    CCSV_WRITE_FIELD(file, writer, "hello, world!");   // Write field
+    CCSV_WRITE_FIELD(file, writer, "\"escapedword\""); // Write field
+    CCSV_WRITE_ROW_END(file, writer, NULL);            // Write row end
 
     short err_status;
     if (ccsv_is_error(writer, &err_status))
