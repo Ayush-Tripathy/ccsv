@@ -111,5 +111,7 @@ Compile with `make ./example_file_name`
 
 For full documentation, see the [docs](https://github.com/Ayush-Tripathy/ccsv/tree/main/docs)
 
+## License
+This project is licensed under the MIT License. See the [LICENSE](LICENSE)
 
 ## Feel free to contribute!
