@@ -1,4 +1,8 @@
 /.vscode
+/.vs
+
+tests/write_test.c
+rough*.c
 
 # Prerequisites
 *.d

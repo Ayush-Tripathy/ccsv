@@ -55,7 +55,7 @@ extern "C"
 
 // Buffer sizes
 #define MAX_BUFFER_SIZE 2048
-#define MAX_FIELD_SIZE 512
+#define MAX_FIELD_SIZE 256
 
 // Default values
 #define CCSV_DELIMITER 0x2c
@@ -72,11 +72,18 @@ extern "C"
 #define DEFAULT_ESCAPE_SEQUENCE "\"\""
 #define DEFAULT_COMMENT_CHAR CCSV_COMMENT_CHAR
 
+#define TOTAL_ERROR_MESSAGES 7
+
 // Return codes
 #define CCSV_SUCCESS 0
 #define CCSV_ERROR -1
 #define CCSV_ERNOMEM -2
 #define CCSV_ERINVALID -3
+#define CCSV_ERNULLFP -6     /* File pointer is NULL */
+#define CCSV_ERMODE -7       /* Invalid mode */
+#define CCSV_EROPEN -8       /* Error opening file */
+#define CCSV_ERINVOBJTYPE -9 /* Invalid object type */
+#define CCSV_ERNULLROW -10   /* Row is NULL */
 
 #define WRITE_SUCCESS CCSV_SUCCESS
 #define WRITE_STARTED 1
@@ -153,15 +160,23 @@ extern "C"
         int __skip_initial_space;
         int __skip_empty_lines;
         int __skip_comments;
+        char *__buffer;
+        size_t __buffer_pos;
+        short __awaiting_termination;
+        size_t __last_bytes_read;
+        size_t __buffer_size;
+        size_t __largest_buffer_size;
+        size_t __last_row_pos;
+        FILE *__fp;
         short status;
         short object_type;
     } ccsv_reader;
 
-    typedef struct CSVRow
+    typedef struct ccsv_row
     {
         char **fields;
         int fields_count;
-    } CSVRow;
+    } ccsv_row;
 
     typedef struct ccsv_writer_options
     {
@@ -174,6 +189,7 @@ extern "C"
         char __delim;
         char __quote_char;
         WriterState __state;
+        FILE *__fp;
         short write_status;
         short object_type;
     } ccsv_writer;
@@ -181,6 +197,22 @@ extern "C"
     // Public functions ------------------------------------------------------------------------
 
     /* -------- General -------- */
+
+    /*
+     *  This function opens a file and attaches it with specified object.
+     *
+     *  returns:
+     *      void*: pointer to the object
+     */
+    void *ccsv_open(const char *filename, short object_type, const char *mode, void *options, short *status);
+
+    /*
+     *  This function closes the ccsv object (reader or writer).
+     *
+     *  params:
+     *      obj: pointer to the object
+     */
+    void ccsv_close(void *obj);
 
     /*
      *   This function returns the status message for the given status code.
@@ -191,7 +223,7 @@ extern "C"
      *  returns:
      *      char*: pointer to the status message
      */
-    char *ccsv_get_status_message(short status);
+    const char *ccsv_get_status_message(short status);
 
     /*
      *    This function returns if error occurred in the object.
@@ -217,7 +249,7 @@ extern "C"
      * returns:
      *    ccsv_reader*: pointer to the reader
      */
-    ccsv_reader *ccsv_init_reader(ccsv_reader_options *options);
+    ccsv_reader *ccsv_init_reader(ccsv_reader_options *options, short *status);
 
     /*
      * This function reads a row from the file pointer, and returns a pointer
@@ -230,7 +262,19 @@ extern "C"
      * returns:
      *     CSVRow*: pointer to the CSVRow struct
      */
-    CSVRow *read_row(FILE *fp, ccsv_reader *parser);
+    ccsv_row *read_row(FILE *fp, ccsv_reader *parser);
+
+    /*
+     * This function reads a row from reader, and returns a pointer
+     *   to CSVRow struct.
+     *
+     * params:
+     *    reader: pointer to the reader
+     *
+     * returns:
+     *     CSVRow*: pointer to the CSVRow struct
+     */
+    ccsv_row *ccsv_next(ccsv_reader *reader);
 
     /*
      *  This function frees the memory allocated to the CSVRow struct.
@@ -238,7 +282,7 @@ extern "C"
      * params:
      *    row: pointer to the CSVRow struct
      */
-    void free_row(CSVRow *row);
+    void free_row(ccsv_row *row);
 
     /* -------- Writer -------- */
 
@@ -253,7 +297,7 @@ extern "C"
      *     ccsv_writer*: pointer to the writer
      *
      */
-    ccsv_writer *ccsv_init_writer(ccsv_writer_options *options);
+    ccsv_writer *ccsv_init_writer(ccsv_writer_options *options, short *status);
 
     /*
      *  This function writes a row (from CSVRow struct) to the file pointer.
@@ -263,7 +307,7 @@ extern "C"
      *   writer: pointer to the writer
      *   row: CSVRow struct
      */
-    int write_row(FILE *fp, ccsv_writer *writer, CSVRow row);
+    int write_row(FILE *fp, ccsv_writer *writer, ccsv_row row);
 
     /*
      *This function writes a row (from string) to the file pointer.
@@ -291,6 +335,35 @@ extern "C"
      *     int: object type
      */
     int _get_object_type(void *obj);
+
+    /*
+     * This function reads a row from the file pointer, and returns a pointer to CSVRow struct.
+     *
+     * params:
+     *    fp: file pointer
+     *    reader: pointer to the reader
+     *
+     * returns:
+     *     CSVRow*: pointer to the CSVRow struct
+     */
+    ccsv_row *_read_row(FILE *fp, ccsv_reader *reader);
+
+    /*
+     * This function reads a row from the file pointer, and returns a pointer to CSVRow struct.
+     *
+     * params:
+     *    fp: file pointer
+     *    reader: pointer to the reader
+     *
+     * returns:
+     *     CSVRow*: pointer to the CSVRow struct
+     */
+    ccsv_row *_next(FILE *fp, ccsv_reader *reader);
+
+    /*
+     * This functions checks if the reader buffer is empty.
+     */
+    int _is_buffer_empty(ccsv_reader *reader);
 
     /*
      *This function frees multiple pointers.
