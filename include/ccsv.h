@@ -4,45 +4,11 @@
 // github.com/Ayush-Tripathy
 
 /*
-    This file has functions to handle parsing of csv files.
-    The parser can be initialized with the function ccsv_init_parser.
-    The parser can be configured with the following parameters:
-        - delimiter character
-        - quote character
-        - skip initial space
-    The parser can be configured to ignore empty lines, comments, and escape sequences.
-
-    For more information on how to use the parser, see the README.md file.
-
-    Functions available:
-        - ccsv_init_reader
-        - read_row
-        - free_row
-
-    Structs available:
-        - ccsv_reader_options
-        - ccsv_reader
-        - CSVRow
-
-    Macros available:
-        - MAX_BUFFER_SIZE
-        - MAX_FIELD_SIZE
-        - DEFAULT_DELIMITER
-        - DEFAULT_QUOTE_CHAR
-        - DEFAULT_ESCAPE_SEQUENCE
-        - DEFAULT_COMMENT_CHAR
-        - CSV_SUCCESS
-        - CSV_ERROR
-        - CSV_NOMEM
-        - CSV_INVALID
-        - WRITE_SUCCESS
-        - WRITE_ERNOTSTARTED
-        - WRITE_ERNOMEM
-        - WRITE_ERINVALID
-        - WRITE_ERALWRITING
-
-    For full documentation, see the README.md file.
-*/
+ *   CCSV - A CSV parser and writer library for C.
+ *   Version: 0.1
+ *
+ *   For full documentation, see the README.md file.
+ */
 
 #pragma once
 

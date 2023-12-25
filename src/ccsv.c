@@ -706,6 +706,8 @@ extern "C"
             row_pos = 0;
             row_string = reader->__buffer;
 
+            // printf("BUFFER: %s\n", row_string);
+
             if (IS_TERMINATOR(row_string[row_pos]) && state == FIELD_START)
                 row_pos++;
         }
@@ -815,6 +817,7 @@ extern "C"
                 {
                     /* Do not return comment lines, parse again */
                     field_pos = 0;
+                    reader->__buffer_pos = row_pos + 1;
                     goto readfile;
                 }
                 else
@@ -832,9 +835,10 @@ extern "C"
                 }
                 field_pos = 0;
 
-                if (IS_TERMINATOR(c))
+                if (IS_TERMINATOR(c)) /* CR or LF */
                 {
-                    while (IS_TERMINATOR(row_string[row_pos]))
+
+                    if (IS_TERMINATOR(row_string[row_pos])) /* CRLF */
                         row_pos++;
 
                     free(field);
