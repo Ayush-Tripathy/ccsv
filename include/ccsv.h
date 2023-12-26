@@ -10,17 +10,52 @@
  *   For full documentation, see the README.md file.
  */
 
+/*
+    MIT License
+
+    Copyright (c) 2023 Ayush Tripathy
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE.
+*/
+
 #pragma once
 
 #include <stdio.h>
+#include <stdbool.h>
+
+#define CCSV_VERSION 0.1f
 
 #ifdef __cplusplus
 extern "C"
 {
 #endif
 
+// File sizes
+#define CCSV_LARGE_FILE_SIZE 524288000ULL /* 500 MiB */
+#define CCSV_MED_FILE_SIZE 20971520ULL    /* 20 MiB */
+
 // Buffer sizes
-#define MAX_BUFFER_SIZE 2048
+#define CCSV_HIGH_BUFFER_SIZE 65536 /* 64 KiB */
+#define CCSV_MED_BUFFER_SIZE 16384  /* 16 KiB */
+#define CCSV_LOW_BUFFER_SIZE 2048   /* 2 KiB */
+
+#define CCSV_BUFFER_SIZE 8096
 #define MAX_FIELD_SIZE 256
 
 // Default values
@@ -35,7 +70,7 @@ extern "C"
 
 #define DEFAULT_DELIMITER CCSV_DELIMITER
 #define DEFAULT_QUOTE_CHAR CCSV_QUOTE_CHAR
-#define DEFAULT_ESCAPE_SEQUENCE "\"\""
+#define DEFAULT_ESCAPE_CHAR CCSV_QUOTE_CHAR
 #define DEFAULT_COMMENT_CHAR CCSV_COMMENT_CHAR
 
 #define TOTAL_ERROR_MESSAGES 7
@@ -45,11 +80,12 @@ extern "C"
 #define CCSV_ERROR -1
 #define CCSV_ERNOMEM -2
 #define CCSV_ERINVALID -3
-#define CCSV_ERNULLFP -6     /* File pointer is NULL */
-#define CCSV_ERMODE -7       /* Invalid mode */
-#define CCSV_EROPEN -8       /* Error opening file */
-#define CCSV_ERINVOBJTYPE -9 /* Invalid object type */
-#define CCSV_ERNULLROW -10   /* Row is NULL */
+#define CCSV_ERNULLFP -6      /* File pointer is NULL */
+#define CCSV_ERMODE -7        /* Invalid mode */
+#define CCSV_EROPEN -8        /* Error opening file */
+#define CCSV_ERINVOBJTYPE -9  /* Invalid object type */
+#define CCSV_ERNULLROW -10    /* Row is NULL */
+#define CCSV_ERBUFNTALLOC -11 /* Buffer not allocated */
 
 #define WRITE_SUCCESS CCSV_SUCCESS
 #define WRITE_STARTED 1
@@ -91,20 +127,20 @@ extern "C"
 
     typedef enum State
     {
-        FIELD_START,
-        FIELD_NOT_STARTED,
-        FIELD_END,
-        FIELD_STARTED,
-        INSIDE_QUOTED_FIELD,
-        MAY_BE_ESCAPED
+        FIELD_START,         /* Start of field */
+        FIELD_NOT_STARTED,   /* Spaces before field start */
+        FIELD_END,           /* End of field */
+        FIELD_STARTED,       /* Inside field */
+        INSIDE_QUOTED_FIELD, /* Inside quoted field */
+        MAY_BE_ESCAPED       /* Quote char detected inside quoted field */
     } State;
 
     typedef enum WriterState
     {
-        WRITER_NOT_STARTED,
-        WRITER_ROW_START,
-        WRITER_WRITING_FIELD,
-        WRITER_ROW_END
+        WRITER_NOT_STARTED,   /* Writer not started */
+        WRITER_ROW_START,     /* Writer setup done */
+        WRITER_WRITING_FIELD, /* Field writing started */
+        WRITER_ROW_END        /* Row writing ended */
     } WriterState;
 
     typedef struct ccsv_reader_options
@@ -112,6 +148,7 @@ extern "C"
         char delim;
         char quote_char;
         char comment_char;
+        char escape_char;
         int skip_initial_space;
         int skip_empty_lines;
         int skip_comments;
@@ -123,16 +160,14 @@ extern "C"
         char __delim;
         char __quote_char;
         char __comment_char;
+        char __escape_char;
         int __skip_initial_space;
         int __skip_empty_lines;
         int __skip_comments;
         char *__buffer;
         size_t __buffer_pos;
-        short __awaiting_termination;
-        size_t __last_bytes_read;
         size_t __buffer_size;
-        size_t __largest_buffer_size;
-        size_t __last_row_pos;
+        bool __buffer_allocated;
         FILE *__fp;
         short status;
         short object_type;
@@ -148,12 +183,14 @@ extern "C"
     {
         char delim;
         char quote_char;
+        char escape_char;
     } ccsv_writer_options;
 
     typedef struct ccsv_writer
     {
         char __delim;
         char __quote_char;
+        char __escape_char;
         WriterState __state;
         FILE *__fp;
         short write_status;
@@ -248,7 +285,7 @@ extern "C"
      * params:
      *    row: pointer to the CSVRow struct
      */
-    void free_row(ccsv_row *row);
+    void ccsv_free_row(ccsv_row *row);
 
     /* -------- Writer -------- */
 
@@ -266,6 +303,24 @@ extern "C"
     ccsv_writer *ccsv_init_writer(ccsv_writer_options *options, short *status);
 
     /*
+     * This function writes a row (from CSVRow struct) to the file pointer.
+     */
+    int ccsv_write(ccsv_writer *writer, ccsv_row row);
+
+    /*
+     * This function writes a row (from string array) to the file pointer.
+     *
+     * params:
+     *    writer: pointer to the writer
+     *    row_string: pointer to the row string
+     *
+     * returns:
+     *    int: 0, if successful
+     *    CSV_ERNOMEM, if memory allocation failed
+     */
+    int ccsv_write_from_array(ccsv_writer *writer, char **fields, int fields_len);
+
+    /*
      *  This function writes a row (from CSVRow struct) to the file pointer.
      *
      * params:
@@ -276,7 +331,7 @@ extern "C"
     int write_row(FILE *fp, ccsv_writer *writer, ccsv_row row);
 
     /*
-     *This function writes a row (from string) to the file pointer.
+     *This function writes a row (from string array) to the file pointer.
      *
      * params:
      *    fp: file pointer

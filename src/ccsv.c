@@ -7,11 +7,33 @@
  * This library provides functions to handle reading, writing csv files.
  */
 
+/*
+    MIT License
+
+    Copyright (c) 2023 Ayush Tripathy
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE.
+*/
+
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
-
-#define VERSION "0.1.0"
 
 #ifdef __cplusplus
 extern "C"
@@ -118,31 +140,20 @@ extern "C"
         }                                                              \
     }
 
-#define UPDATE_BUFFER_SIZE(row_len)                   \
-    if (reader->__largest_buffer_size == 0)           \
-    {                                                 \
-        reader->__largest_buffer_size = row_len;      \
-        reader->__buffer_size = row_len;              \
-    }                                                 \
-    else if (row_len > reader->__largest_buffer_size) \
-    {                                                 \
-        reader->__largest_buffer_size = row_len;      \
-        reader->__buffer_size = row_len;              \
-    }
-
 #define RETURN_IF_WRITE_ERROR(writer, desired_status) \
     if (writer->write_status != desired_status)       \
         return writer->write_status;
 
     ccsv_reader *ccsv_init_reader(ccsv_reader_options *options, short *status)
     {
-        char delim, quote_char, comment_char;
+        char delim, quote_char, comment_char, escape_char;
         int skip_initial_space, skip_empty_lines, skip_comments;
         if (options == NULL)
         {
             delim = DEFAULT_DELIMITER;
             quote_char = DEFAULT_QUOTE_CHAR;
             comment_char = DEFAULT_COMMENT_CHAR;
+            escape_char = DEFAULT_ESCAPE_CHAR;
             skip_initial_space = 0;
             skip_empty_lines = 0;
             skip_comments = 0;
@@ -168,6 +179,12 @@ extern "C"
 
             else
                 comment_char = options->comment_char;
+
+            if (options->escape_char == CCSV_NULL_CHAR)
+                escape_char = DEFAULT_ESCAPE_CHAR;
+
+            else
+                escape_char = options->escape_char;
 
             if (options->skip_initial_space == CCSV_NULL_CHAR)
                 skip_initial_space = 0;
@@ -199,26 +216,12 @@ extern "C"
         parser->__delim = delim;
         parser->__quote_char = quote_char;
         parser->__comment_char = comment_char;
+        parser->__escape_char = escape_char;
         parser->__skip_initial_space = skip_initial_space;
         parser->__skip_empty_lines = skip_empty_lines;
         parser->__skip_comments = skip_comments;
 
         parser->__fp = NULL;
-
-        parser->__buffer = (char *)malloc(MAX_BUFFER_SIZE + 1);
-        if (parser->__buffer == NULL)
-        {
-            free(parser);
-            if (status != NULL)
-                *status = CCSV_ERNOMEM;
-            return NULL;
-        }
-        parser->__buffer[0] = CCSV_NULL_CHAR;
-
-        parser->__buffer_size = MAX_BUFFER_SIZE;
-        parser->__largest_buffer_size = 0;
-
-        parser->__last_row_pos = 0;
 
         parser->rows_read = 0;
         parser->status = CCSV_SUCCESS;
@@ -227,7 +230,7 @@ extern "C"
         return parser;
     }
 
-    void free_row(ccsv_row *row)
+    void ccsv_free_row(ccsv_row *row)
     {
         const int fields_count = row->fields_count;
         for (int i = 0; i < fields_count; i++)
@@ -276,14 +279,6 @@ extern "C"
             return NULL;
         }
 
-        FILE *fp = fopen(filename, mode);
-        if (fp == NULL)
-        {
-            if (status != NULL)
-                *status = CCSV_EROPEN;
-            return NULL;
-        }
-
         if (object_type == CCSV_READER)
         {
             short init_status;
@@ -302,6 +297,44 @@ extern "C"
                     *status = CCSV_ERNOMEM;
                 return NULL;
             }
+            FILE *fp = fopen(filename, mode);
+            if (fp == NULL)
+            {
+                if (status != NULL)
+                    *status = CCSV_EROPEN;
+                return NULL;
+            }
+
+            if (!reader->__buffer_allocated)
+            {
+                size_t buffer_size = CCSV_BUFFER_SIZE;
+
+                size_t file_size;
+
+                fseek(fp, 0, SEEK_END);
+                file_size = ftell(fp);
+                fseek(fp, 0, SEEK_SET);
+
+                if (file_size >= CCSV_LARGE_FILE_SIZE)
+                    buffer_size = CCSV_HIGH_BUFFER_SIZE;
+                else if (file_size >= CCSV_MED_FILE_SIZE)
+                    buffer_size = CCSV_MED_BUFFER_SIZE;
+                else
+                    buffer_size = CCSV_LOW_BUFFER_SIZE;
+
+                reader->__buffer = (char *)malloc(buffer_size + 1);
+                if (reader->__buffer == NULL)
+                {
+                    free(reader);
+                    if (status != NULL)
+                        *status = CCSV_ERNOMEM;
+                    return NULL;
+                }
+                reader->__buffer[0] = CCSV_NULL_CHAR;
+
+                reader->__buffer_size = buffer_size;
+                reader->__buffer_allocated = true;
+            }
             reader->__fp = fp;
             reader->object_type = object_type;
 
@@ -309,6 +342,14 @@ extern "C"
         }
         else if (object_type == CCSV_WRITER)
         {
+            FILE *fp = fopen(filename, mode);
+            if (fp == NULL)
+            {
+                if (status != NULL)
+                    *status = CCSV_EROPEN;
+                return NULL;
+            }
+
             short init_status;
 
 #ifdef __cplusplus
@@ -357,6 +398,15 @@ extern "C"
 
     ccsv_row *ccsv_next(ccsv_reader *reader)
     {
+        if (reader == NULL)
+            return NULL;
+
+        if (reader->__buffer == NULL)
+        {
+            reader->status = CCSV_ERBUFNTALLOC;
+            return NULL;
+        }
+
         if (reader->__fp == NULL)
         {
             reader->status = CCSV_ERNULLFP;
@@ -394,14 +444,14 @@ extern "C"
 
         State state = FIELD_START;
 
-        char *row_string = (char *)malloc(MAX_BUFFER_SIZE + 1);
+        char *row_string = (char *)malloc(CCSV_BUFFER_SIZE + 1);
         if (row_string == NULL)
         {
             _free_multiple(1, row);
             reader->status = CCSV_ERNOMEM;
             return NULL;
         }
-        size_t row_string_size = MAX_BUFFER_SIZE;
+        size_t row_string_size = CCSV_BUFFER_SIZE;
         size_t row_pos = 0;
 
         char **fields = (char **)malloc(sizeof(char *));
@@ -428,7 +478,7 @@ extern "C"
         size_t row_len;
 
     readfile:
-        if (fgets(row_string, MAX_BUFFER_SIZE, fp) == NULL)
+        if (fgets(row_string, CCSV_BUFFER_SIZE, fp) == NULL)
         {
             /* If fields is not empty then return the row */
             if (fields_count > 0 || field_pos > 0)
@@ -653,6 +703,7 @@ extern "C"
         const char DELIM = reader->__delim;
         const char QUOTE_CHAR = reader->__quote_char;
         const char COMMENT_CHAR = reader->__comment_char;
+        const char ESCAPE_CHAR = reader->__escape_char;
         const int SKIP_INITIAL_SPACE = reader->__skip_initial_space;
         const int SKIP_EMPTY_LINES = reader->__skip_empty_lines;
         const int SKIP_COMMENTS = reader->__skip_comments;
@@ -695,6 +746,24 @@ extern "C"
 
             if (bytes_read <= 0)
             {
+                if (fields_count > 0 || field_pos > 0)
+                {
+                    /* Add the last field */
+
+                    /*
+                     * If fields_count > 0:
+                     * This happens when the function holding the values of last row
+                     * but yet to return the last row
+                     *
+                     * if field_pos > 0:
+                     * This only happens when there is a single element in the last row and also
+                     * there is no line after the current line
+                     * So we need to add the only field of the last row
+                     */
+                    ADD_FIELD(field);
+                    goto end;
+                }
+
                 _free_multiple(4, row_string, field, fields, row);
                 return NULL;
             }
@@ -702,11 +771,8 @@ extern "C"
             reader->__buffer[bytes_read] = CCSV_NULL_CHAR;
             reader->__buffer_size = bytes_read;
             reader->__buffer_pos = 0;
-            reader->__last_row_pos = 0;
             row_pos = 0;
             row_string = reader->__buffer;
-
-            // printf("BUFFER: %s\n", row_string);
 
             if (IS_TERMINATOR(row_string[row_pos]) && state == FIELD_START)
                 row_pos++;
@@ -745,6 +811,11 @@ extern "C"
                 GROW_FIELD_BUFFER_IF_NEEDED(field, field_size, field_pos);
                 if (c == QUOTE_CHAR)
                     state = MAY_BE_ESCAPED; /* Might be the end of the field, or it might be a escaped quote */
+                else if (c == ESCAPE_CHAR)
+                {
+                    field[field_pos++] = c; /* Escaped escape character */
+                    row_pos++;
+                }
                 else
                     field[field_pos++] = c;
 
@@ -854,7 +925,7 @@ extern "C"
         // This point is reached only when for loop is completed fully
         if (row_pos > bytes_read - 1)
         {
-            reader->__buffer[0] = CCSV_NULL_CHAR;
+            reader->__buffer[0] = CCSV_NULL_CHAR; /* Reset the buffer */
             goto readfile;
         }
 
@@ -863,7 +934,7 @@ extern "C"
         row->fields_count = fields_count;
 
         if (row_pos > bytes_read - 1)
-            reader->__buffer[0] = CCSV_NULL_CHAR;
+            reader->__buffer[0] = CCSV_NULL_CHAR; /* Reset the buffer */
         else
             reader->__buffer_pos = row_pos;
 
@@ -881,12 +952,13 @@ extern "C"
 
     ccsv_writer *ccsv_init_writer(ccsv_writer_options *options, short *status)
     {
-        char delim, quote_char;
+        char delim, quote_char, escape_char;
         WriterState state = WRITER_NOT_STARTED;
         if (options == NULL)
         {
             delim = DEFAULT_DELIMITER;
             quote_char = DEFAULT_QUOTE_CHAR;
+            escape_char = DEFAULT_ESCAPE_CHAR;
         }
         else
         {
@@ -903,6 +975,12 @@ extern "C"
 
             else
                 quote_char = options->quote_char;
+
+            if (options->escape_char == CCSV_NULL_CHAR)
+                escape_char = DEFAULT_ESCAPE_CHAR;
+
+            else
+                escape_char = options->escape_char;
         }
 
         // Writer
@@ -915,12 +993,35 @@ extern "C"
         }
         writer->__delim = delim;
         writer->__quote_char = quote_char;
+        writer->__escape_char = escape_char;
         writer->__state = state;
 
         writer->write_status = WRITER_NOT_STARTED;
         writer->object_type = CCSV_WRITER;
 
         return writer;
+    }
+
+    int ccsv_write(ccsv_writer *writer, ccsv_row row)
+    {
+        if (writer == NULL)
+            return WRITE_ERNOTSTARTED;
+
+        if (writer->__fp == NULL)
+            return CCSV_ERNULLFP;
+
+        return write_row(writer->__fp, writer, row);
+    }
+
+    int ccsv_write_from_array(ccsv_writer *writer, char **fields, int fields_len)
+    {
+        if (writer == NULL)
+            return WRITE_ERNOTSTARTED;
+
+        if (writer->__fp == NULL)
+            return CCSV_ERNULLFP;
+
+        return write_row_from_array(writer->__fp, writer, fields, fields_len);
     }
 
     int write_row(FILE *fp, ccsv_writer *writer, ccsv_row row)
@@ -1035,6 +1136,7 @@ extern "C"
 
         const char DELIM = writer->__delim;
         const char QUOTE_CHAR = writer->__quote_char;
+        const char ESCAPE_CHAR = writer->__escape_char;
 
         int inside_quotes = 0;
 
@@ -1059,17 +1161,14 @@ extern "C"
                 ch = string[i];
                 /* Escape the quote character */
                 if (ch == QUOTE_CHAR)
-                {
-                    fputc(QUOTE_CHAR, fp);
-                }
+                    fputc(ESCAPE_CHAR, fp);
+
                 fputc(ch, fp);
             }
             fputc(QUOTE_CHAR, fp);
         }
         else
-        {
             fputs(string, fp);
-        }
 
         writer->write_status = WRITE_SUCCESS;
         return WRITE_SUCCESS;
