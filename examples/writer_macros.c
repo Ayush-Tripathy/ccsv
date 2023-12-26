@@ -13,8 +13,8 @@ int main(void)
     };
 
     // Initialize the writer
-    ccsv_writer *writer = ccsv_init_writer(&options);
-    if (writer == NULL || writer == (void *)CCSV_ERNOMEM)
+    ccsv_writer *writer = ccsv_init_writer(&options, NULL);
+    if (writer == NULL)
     {
         fprintf(stderr, "Error initializing CSV writer\n");
         return 1;

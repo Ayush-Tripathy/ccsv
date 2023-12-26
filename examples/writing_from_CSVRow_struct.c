@@ -13,14 +13,14 @@ int main(void)
     };
 
     // Initialize the writer
-    ccsv_writer *writer = ccsv_init_writer(&options);
-    if (writer == NULL || writer == (void *)CCSV_ERNOMEM)
+    ccsv_writer *writer = ccsv_init_writer(&options, NULL);
+    if (writer == NULL)
     {
         fprintf(stderr, "Error initializing CSV writer\n");
         return 1;
     }
 
-    ccsv_reader *reader = ccsv_init_reader(NULL);
+    ccsv_reader *reader = ccsv_init_reader(NULL, NULL);
 
     FILE *dest_file = fopen("output.csv", "a+");
     if (dest_file == NULL)
@@ -37,11 +37,13 @@ int main(void)
         return 1;
     }
 
-    CSVRow *row = read_row(source_file, reader);
+    ccsv_row *row = read_row(source_file, reader);
     write_row(dest_file, writer, *row); // Pass the value of the row pointer
+    ccsv_free_row(row);                 // Free the row
 
     row = read_row(source_file, reader); // Read the next row
     write_row(dest_file, writer, *row);  // Write row to file
+    ccsv_free_row(row);                  // Free the row
 
     if (ccsv_is_error(writer, NULL))
     {

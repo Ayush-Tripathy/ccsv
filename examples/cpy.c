@@ -16,7 +16,7 @@ int main(int argc, char *argv[])
 
     char *filename = argv[1];
 
-    ccsv_reader *reader = ccsv_init_reader(NULL);
+    ccsv_reader *reader = ccsv_init_reader(NULL, NULL);
     if (reader == NULL || reader == (void *)CCSV_ERNOMEM)
     {
         fprintf(stderr, "Error initializing CSV reader\n");
@@ -40,16 +40,16 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    ccsv_writer *writer = ccsv_init_writer(NULL);
+    ccsv_writer *writer = ccsv_init_writer(NULL, NULL);
 
-    CSVRow *row;
+    ccsv_row *row;
 
     size_t fields_count = 0;
     while ((row = read_row(file, reader)) != NULL)
     {
         fields_count += row->fields_count;
         write_row(output, writer, *row);
-        free_row(row);
+        ccsv_free_row(row);
     }
 
     printf("%s - %d rows, %ld fields\n", argv[1], reader->rows_read, fields_count);

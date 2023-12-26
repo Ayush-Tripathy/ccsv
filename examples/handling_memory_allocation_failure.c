@@ -19,25 +19,23 @@ int main(void)
         // Add other options if necessary
     };
 
-    ccsv_reader *reader = ccsv_init_reader(&options);
-    if (reader == (void *)CCSV_ERNOMEM)
+    ccsv_reader *reader = ccsv_init_reader(&options, NULL);
+    if (reader == NULL || ccsv_is_error(reader, NULL))
     {
         fprintf(stderr, "Error initializing CSV reader\n");
         fclose(csv_file);
         return 1;
     }
 
-    CSVRow *row;
+    ccsv_row *row;
+    short err_status;
     while (1)
     {
         row = read_row(csv_file, reader);
-        if (row == NULL)
+        if (row == NULL && ccsv_is_error(reader, &err_status))
         {
-            break;
-        }
-        else if (row == (void *)CCSV_ERNOMEM)
-        {
-            fprintf(stderr, "Memory allocation failure while reading row\n");
+            if (err_status == CCSV_ERNOMEM)
+                fprintf(stderr, "Memory allocation failure while reading row\n");
             break;
         }
 
@@ -48,7 +46,7 @@ int main(void)
         }
         printf("\n");
 
-        free_row(row);
+        ccsv_free_row(row);
     }
     printf("\n\nRows read: %d\n", reader->rows_read);
 

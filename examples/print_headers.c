@@ -13,10 +13,13 @@ int main(void)
         exit(1);
     }
 
-    // Reader object
-    ccsv_reader *reader = ccsv_init_reader(NULL); // NULL for default options
+    // ** There is new way to read rows in ccsv v0.5.0 **
+    // ** Check examples/print_each_row_ccsv_v0.5.c **
 
-    CSVRow *row = read_row(fp, reader);
+    // Reader object
+    ccsv_reader *reader = ccsv_init_reader(NULL, NULL); // NULL for default options
+
+    ccsv_row *row = read_row(fp, reader);
 
     int row_len = row->fields_count; // Get number of fields in the row
     for (int i = 0; i < row_len; i++)
@@ -24,8 +27,8 @@ int main(void)
         printf("%d.Field: %s\n", i + 1, row->fields[i]); // Print each field
     }
 
-    free_row(row); // Free the memory allocated to the row
-    free(reader);  // Free the memory allocated to the reader
+    ccsv_free_row(row); // Free the memory allocated to the row
+    free(reader);       // Free the memory allocated to the reader
     fclose(fp);
 
     return 0;

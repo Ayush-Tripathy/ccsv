@@ -16,34 +16,27 @@ int main(int argc, char *argv[])
 
     char *filename = argv[1];
 
-    ccsv_reader *reader = ccsv_init_reader(NULL);
-    if (reader == NULL || reader == (void *)CCSV_ERNOMEM)
+    ccsv_reader_options options = {.skip_initial_space = 1, .skip_empty_lines = 0};
+
+    ccsv_reader *reader = ccsv_open(filename, CCSV_READER, "r", &options, NULL);
+    if (reader == NULL || ccsv_is_error(reader, NULL))
     {
         fprintf(stderr, "Error initializing CSV reader\n");
         return 1;
     }
 
-    FILE *file = fopen(filename, "r");
-    if (file == NULL)
-    {
-        fprintf(stderr, "Error opening file\n");
-        free(reader);
-        return 1;
-    }
-
-    CSVRow *row;
+    ccsv_row *row;
 
     size_t fields_count = 0;
-    while ((row = read_row(file, reader)) != NULL)
+    while ((row = ccsv_next(reader)) != NULL)
     {
         fields_count += row->fields_count;
-        free_row(row);
+        ccsv_free_row(row);
     }
 
     printf("%s: %d rows, %ld fields\n", argv[1], reader->rows_read, fields_count);
 
-    fclose(file);
-    free(reader);
+    ccsv_close(reader);
 
     clock_t end = clock();
     double time_spent = (double)(end - start) / CLOCKS_PER_SEC;

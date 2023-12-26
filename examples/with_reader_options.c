@@ -31,10 +31,10 @@ int main(void)
         .skip_comments = 1};
 
     // Reader object
-    ccsv_reader *reader = ccsv_init_reader(&options); // NULL for default options
+    ccsv_reader *reader = ccsv_init_reader(&options, NULL); // NULL for default options
     // free(options); /* If you used Way 1 */
 
-    CSVRow *row;
+    ccsv_row *row;
 
     // Read each row and print each field
     while ((row = read_row(fp, reader)) != NULL)
@@ -45,7 +45,7 @@ int main(void)
             printf("%s\t", row->fields[i]); // Print each field
         }
         printf("\n");
-        free_row(row); // Free the memory allocated to the row
+        ccsv_free_row(row); // Free the memory allocated to the row
     }
     printf("\n\nRows read: %d\n", reader->rows_read); // Print number of rows read
 
