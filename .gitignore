@@ -1,8 +1,15 @@
 /.vscode
 /.vs
 
+/rough
+
 tests/write_test.c
 rough*.c
+
+build
+out
+
+*.pyd
 
 # Prerequisites
 *.d
