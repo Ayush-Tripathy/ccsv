@@ -101,31 +101,39 @@ extern "C"
 
 /* Reader */
 
-// These macros should be used only in read_row() function
-#define ADD_FIELD(field)                                            \
-  field[field_pos++] = CCSV_NULL_CHAR;                              \
-  fields_count++;                                                   \
-  fields = (char **)realloc(fields, sizeof(char *) * fields_count); \
-  if (fields == NULL)                                               \
-  {                                                                 \
-    _free_multiple(3, field, row_string, row);                      \
-    reader->status = CCSV_ERNOMEM;                                  \
-    return NULL;                                                    \
-  }                                                                 \
-  fields[fields_count - 1] = field;
+// These macros should be used only in _read_row, _next function
+#define ADD_FIELD(field)                                                   \
+  do                                                                       \
+  {                                                                        \
+    field[field_pos++] = CCSV_NULL_CHAR;                                   \
+    fields_count++;                                                        \
+    char **temp = (char **)realloc(fields, sizeof(char *) * fields_count); \
+    if (temp == NULL)                                                      \
+    {                                                                      \
+      _free_multiple(3, field, row_string, row);                           \
+      reader->status = CCSV_ERNOMEM;                                       \
+      return NULL;                                                         \
+    }                                                                      \
+    fields = temp;                                                         \
+    fields[fields_count - 1] = field;                                      \
+  } while (0)
 
 #define GROW_FIELD_BUFFER_IF_NEEDED(field, field_size, field_pos) \
-  if (field_pos > field_size - 1)                                 \
+  do                                                              \
   {                                                               \
-    field_size += MAX_FIELD_SIZE;                                 \
-    field = (char *)realloc(field, field_size + 1);               \
-    if (field == NULL)                                            \
+    if (field_pos > field_size - 1)                               \
     {                                                             \
-      _free_multiple(3, fields, row_string, row);                 \
-      reader->status = CCSV_ERNOMEM;                              \
-      return NULL;                                                \
+      field_size += MAX_FIELD_SIZE;                               \
+      char *temp = (char *)realloc(field, field_size + 1);        \
+      if (temp == NULL)                                           \
+      {                                                           \
+        _free_multiple(3, fields, row_string, row);               \
+        reader->status = CCSV_ERNOMEM;                            \
+        return NULL;                                              \
+      }                                                           \
+      field = temp;                                               \
     }                                                             \
-  }
+  } while (0)
 
 #define GROW_ROW_BUFFER_IF_NEEDED(row_string, row_len, row_pos)    \
   if (row_pos > row_len - 1)                                       \
@@ -915,9 +923,7 @@ extern "C"
           goto readfile;
         }
         else
-        {
           ADD_FIELD(field);
-        }
 
         field = (char *)malloc(MAX_FIELD_SIZE + 1);
         field_size = MAX_FIELD_SIZE;
