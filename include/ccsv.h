@@ -100,6 +100,7 @@ extern "C"
 #define CCSV_WRITER 22
 
 #define ARRAY_LEN(array) sizeof(array) / sizeof(array[0])
+#define IS_TERMINATOR(c) (c == CCSV_CR || c == CCSV_LF || c == CCSV_NULL_CHAR)
 
 // Writer Macros
 /* Start new row */
@@ -256,19 +257,6 @@ extern "C"
    *    ccsv_reader*: pointer to the reader
    */
   ccsv_reader *ccsv_init_reader(ccsv_reader_options *options, short *status);
-
-  /*
-   * This function reads a row from the file pointer, and returns a pointer
-   *   to CSVRow struct.
-   *
-   * params:
-   *    fp: file pointer
-   *    parser: pointer to the parser
-   *
-   * returns:
-   *     CSVRow*: pointer to the CSVRow struct
-   */
-  ccsv_row *read_row(FILE *fp, ccsv_reader *parser);
 
   /*
    * This function reads a row from reader, and returns a pointer
