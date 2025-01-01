@@ -28,7 +28,7 @@ ccsv_reader *reader = (ccsv_reader *) ccsv_open("../../comments.csv", CCSV_READE
 ### Read a row with
 
 ```c
-ccsv_row *row = ccsv_row(reader); // Will return NULL if all rows are read 
+ccsv_row *row = ccsv_next(reader); // Will return NULL if all rows are read 
 ```
 
 `reader` is a ccsv_reader object
