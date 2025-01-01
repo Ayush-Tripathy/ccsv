@@ -48,13 +48,13 @@ char *field = row->fields[0]; // 0 for the first field
 ### Free the memory allocated to a row with
 
 ```c
-free_row(row);
+ccsv_free_row(row);
 ```
 
 ### Free the memory allocated to the reader with
 
 ```c
-free(reader);
+ccsv_close(reader);
 ```
 
 
