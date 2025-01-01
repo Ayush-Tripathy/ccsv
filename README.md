@@ -7,7 +7,7 @@ For full documentation, see the [docs](https://github.com/Ayush-Tripathy/ccsv/tr
 ### Create a reader object
 
 ```c
-ccsv_reader *reader = ccsv_open("../../comments.csv", CCSV_READER, "r", &options, NULL); // NULL for default options
+ccsv_reader *reader = (ccsv_reader *) ccsv_open("../../comments.csv", CCSV_READER, "r", &options, NULL); // NULL for default options
 ```
 
 ### Create a reader object with custom options
@@ -21,7 +21,7 @@ ccsv_reader_options options = {
         .skip_comments = 1};
 
 // Initialize the reader with the options
-ccsv_reader *reader = ccsv_init_reader(&options);
+ccsv_reader *reader = (ccsv_reader *) ccsv_open("../../comments.csv", CCSV_READER, "r", &options, &options);
 ```
 
 
